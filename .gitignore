@@ -1,36 +1,37 @@
-# Ignorar bibliotecas pesadas do React
-node_modules/
-dist/
+# ==============================================================================
+# REGRAS DO FRONTEND (REACT / VITE)
+# ==============================================================================
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.local/
 
-# Ignorar lixo do Python
-__pycache__/
-venv/
-env/
-.venv/
+# Logs de erro de pacotes do Node
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/lerna-debug.log*
 
-# Ignorar o banco de dados e senhas
-*.db
-financeiro.db
-.env
+# ==============================================================================
+# REGRAS DO BACKEND (PYTHON / FASTAPI)
+# ==============================================================================
+backend/__pycache__/
+backend/venv/
+backend/env/
+backend/.venv/
+backend/.env
 
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Banco de dados local SQLite (Dados sensíveis da oficina)
+backend/*.db
+backend/financeiro.db
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
+# ==============================================================================
+# CONFIGURAÇÕES DO EDITOR E SISTEMA (VS CODE & SISTEMAS)
+# ==============================================================================
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*

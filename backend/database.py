@@ -7,6 +7,8 @@ def criar_tabelas():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            sexo TEXT NOT NULL,
             username TEXT UNIQUE NOT NULL,
             senha TEXT NOT NULL
         )
