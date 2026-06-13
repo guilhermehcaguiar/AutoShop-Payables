@@ -1,24 +1,116 @@
-import React, { useState } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
+import Toast from './components/Toast';
+import ModalNovoBoleto from './components/ModalNovoBoleto';
+import ConfirmDialog from './components/ConfirmDialog';
+import FornecedoresPage from './components/FornecedoresPage';
+import RelatoriosPage from './components/RelatoriosPage';
+import AuditoriaPage from './components/AuditoriaPage';
+import AdminPage from './components/AdminPage';
 
 function App() {
-  // ==============================================================================
-  // ESTADOS
-  // ==============================================================================
   const [estaLogado, setEstaLogado] = useState(false);
   const [username, setUsername] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [usuarioPerfil, setUsuarioPerfil] = useState({ nome: '', sexo: '' });
   const [boletos, setBoletos] = useState([]);
+  const [sidebarAberta, setSidebarAberta] = useState(false);
+  const [paginaAtual, setPaginaAtual] = useState('dashboard');
+  const [toast, setToast] = useState({ mensagem: '', tipo: 'sucesso', visivel: false });
+  const [modalAberto, setModalAberto] = useState(false);
+  const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [busca, setBusca] = useState('');
+  const [selecionados, setSelecionados] = useState(new Set());
+  const [mesSelecionado, setMesSelecionado] = useState(() => {
+    const agora = new Date();
+    return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [confirmExcluir, setConfirmExcluir] = useState({ aberto: false, boletoId: null });
+  const [carregandoBoletos, setCarregandoBoletos] = useState(false);
+  const [tema, setTema] = useState(() => localStorage.getItem('atend-tema') || 'dark');
+  const [boletoEditando, setBoletoEditando] = useState(null);
+  const [notificacoes, setNotificacoes] = useState(null);
+  const [usuarioAdmin, setUsuarioAdmin] = useState(false);
 
-  // ==============================================================================
-  // FUNÇÃO DE AUTENTICAÇÃO
-  // ==============================================================================
+  // Aplica o tema no <html>
+  useEffect(() => {
+    const root = document.documentElement;
+    if (tema === 'system') {
+      const prefereDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.setAttribute('data-theme', prefereDark ? 'dark' : 'light');
+      const listener = (e) => root.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', listener);
+      return () => mq.removeEventListener('change', listener);
+    } else {
+      root.setAttribute('data-theme', tema);
+    }
+    localStorage.setItem('atend-tema', tema);
+  }, [tema]);
+
+  const fetchNotificacoes = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const resp = await fetch('http://localhost:8000/boletos/notificacoes', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (resp.ok) setNotificacoes(await resp.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchNotificacoes();
+    const interval = setInterval(fetchNotificacoes, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotificacoes]);
+
+  const mostrarToast = useCallback((mensagem, tipo = 'sucesso') => {
+    setToast({ mensagem, tipo, visivel: true });
+  }, []);
+
+  const fecharToast = useCallback(() => {
+    setToast((prev) => ({ ...prev, visivel: false }));
+  }, []);
+
+  const fetchBoletos = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    setCarregandoBoletos(true);
+    try {
+      const resposta = await fetch('http://localhost:8000/boletos/', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (resposta.ok) {
+        setBoletos(await resposta.json());
+      } else if (resposta.status === 401) {
+        lidarComSair();
+      }
+    } catch {
+      mostrarToast('Erro ao carregar boletos', 'erro');
+    } finally {
+      setCarregandoBoletos(false);
+    }
+  }, [mostrarToast]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const perfilSalvo = localStorage.getItem('usuarioPerfil');
+    if (token && perfilSalvo) {
+      const perfil = JSON.parse(perfilSalvo);
+      setUsuarioPerfil(perfil);
+      setUsuarioAdmin(perfil.admin || false);
+      setEstaLogado(true);
+      fetchBoletos();
+    }
+  }, [fetchBoletos]);
+
   const lidarComLogin = async (e) => {
     e.preventDefault();
-    setErro(''); 
+    setErro('');
 
-    // O FastAPI (OAuth2PasswordRequestForm) exige os dados no formato x-www-form-urlencoded
     const dadosFormulario = new URLSearchParams();
     dadosFormulario.append('username', username);
     dadosFormulario.append('password', senha);
@@ -26,252 +118,624 @@ function App() {
     try {
       const resposta = await fetch('http://localhost:8000/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: dadosFormulario,
       });
 
       const dados = await resposta.json();
 
       if (resposta.ok) {
-        // Guarda as informações reais recuperadas do banco SQLite
-        setUsuarioPerfil({
-          nome: dados.usuario.nome,
-          sexo: dados.usuario.sexo
-        });
-        
-        // Armazena o token de segurança no navegador
+        const perfil = { nome: dados.usuario.nome, sexo: dados.usuario.sexo, admin: dados.usuario.admin };
+        setUsuarioPerfil(perfil);
+        setUsuarioAdmin(dados.usuario.admin || false);
         localStorage.setItem('token', dados.access_token);
-        
-        // Libera a entrada no painel principal
+        localStorage.setItem('usuarioPerfil', JSON.stringify(perfil));
         setEstaLogado(true);
+        fetchBoletos();
       } else {
         setErro(dados.detail || 'Usuário ou senha incorretos.');
       }
-    } catch (error) {
+    } catch {
       setErro('Não foi possível conectar ao servidor de banco de dados.');
     }
   };
 
-  // ==============================================================================
-  // RENDERIZAÇÃO DA TELA DE LOGIN
-  // ==============================================================================
+  const lidarComSair = () => {
+    setEstaLogado(false);
+    setSidebarAberta(false);
+    setBoletos([]);
+    setSelecionados(new Set());
+    localStorage.removeItem('token');
+    localStorage.removeItem('usuarioPerfil');
+  };
+
+  const lidarComPagar = async (boletoId) => {
+    const token = localStorage.getItem('token');
+    try {
+      const resposta = await fetch(`http://localhost:8000/boletos/${boletoId}/pagar`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (resposta.ok) {
+        setBoletos((prev) =>
+          prev.map((b) => (b.id === boletoId ? { ...b, status: 'Pago' } : b))
+        );
+        mostrarToast('Boleto pago com sucesso!');
+      }
+    } catch {
+      mostrarToast('Erro ao pagar boleto', 'erro');
+    }
+  };
+
+  const lidarComPagarLote = async () => {
+    if (selecionados.size === 0) return;
+    const token = localStorage.getItem('token');
+    const ids = Array.from(selecionados);
+    try {
+      const resposta = await fetch('http://localhost:8000/boletos/pagar-lote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ids }),
+      });
+      if (resposta.ok) {
+        setBoletos((prev) =>
+          prev.map((b) => (ids.includes(b.id) ? { ...b, status: 'Pago' } : b))
+        );
+        setSelecionados(new Set());
+        mostrarToast(`${ids.length} boletos pagos com sucesso!`);
+      }
+    } catch {
+      mostrarToast('Erro ao pagar boletos', 'erro');
+    }
+  };
+
+  const lidarComExcluir = async () => {
+    const boletoId = confirmExcluir.boletoId;
+    if (!boletoId) return;
+    const token = localStorage.getItem('token');
+    try {
+      const resposta = await fetch(`http://localhost:8000/boletos/${boletoId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (resposta.ok) {
+        setBoletos((prev) => prev.filter((b) => b.id !== boletoId));
+        setSelecionados((prev) => { const novo = new Set(prev); novo.delete(boletoId); return novo; });
+        setConfirmExcluir({ aberto: false, boletoId: null });
+        mostrarToast('Boleto excluído com sucesso!');
+      }
+    } catch {
+      mostrarToast('Erro ao excluir boleto', 'erro');
+    }
+  };
+
+  const lidarComExportarCSV = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const resp = await fetch('http://localhost:8000/boletos/exportar-csv', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `boletos_${new Date().toISOString().slice(0, 7)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        mostrarToast('CSV exportado com sucesso!');
+      }
+    } catch { mostrarToast('Erro ao exportar', 'erro'); }
+  };
+
+  const toggleSelecionado = (id) => {
+    setSelecionados((prev) => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  };
+
+  const toggleSelecionarTodos = () => {
+    setSelecionados((prev) => {
+      if (prev.size === boletosFiltrados.length && boletosFiltrados.length > 0) return new Set();
+      return new Set(boletosFiltrados.map((b) => b.id));
+    });
+  };
+
+  const hoje = new Date().toISOString().split('T')[0];
+
+  const boletosFiltrados = useMemo(() => {
+    let lista = boletos.filter((b) => b.vencimento.startsWith(mesSelecionado));
+    if (filtroStatus === 'pendentes') lista = lista.filter((b) => b.status !== 'Pago');
+    else if (filtroStatus === 'pagos') lista = lista.filter((b) => b.status === 'Pago');
+    else if (filtroStatus === 'vencendo') lista = lista.filter((b) => b.vencimento === hoje && b.status !== 'Pago');
+    if (busca.trim()) {
+      const termo = busca.toLowerCase();
+      lista = lista.filter((b) => b.fornecedor.toLowerCase().includes(termo));
+    }
+    return lista.sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
+  }, [boletos, mesSelecionado, filtroStatus, busca, hoje]);
+
+  const totalPago = useMemo(
+    () => boletos.filter((b) => b.vencimento.startsWith(mesSelecionado) && b.status === 'Pago').reduce((s, b) => s + b.valor, 0),
+    [boletos, mesSelecionado]
+  );
+
+  const totalAPagar = useMemo(
+    () => boletos.filter((b) => b.vencimento.startsWith(mesSelecionado) && b.status !== 'Pago').reduce((s, b) => s + b.valor, 0),
+    [boletos, mesSelecionado]
+  );
+
+  const vencendoHoje = useMemo(
+    () => boletos.filter((b) => b.vencimento === hoje && b.status !== 'Pago').reduce((s, b) => s + b.valor, 0),
+    [boletos, hoje]
+  );
+
+  const totalExibido = useMemo(
+    () => boletosFiltrados.reduce((s, b) => s + b.valor, 0),
+    [boletosFiltrados]
+  );
+
+  const meses = useMemo(() => {
+    const lista = [];
+    const agora = new Date();
+    for (let i = 0; i < 12; i++) {
+      const data = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+      const valor = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
+      const rotulo = data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^\w/, (c) => c.toUpperCase());
+      lista.push({ valor, rotulo });
+    }
+    return lista;
+  }, []);
+
+  const formatarMoeda = (valor) =>
+    `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const TabelaBoletos = () => (
+    <>
+      <div className="px-5 py-4 border-b border-atend-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-white">Contas a Pagar</h3>
+          <p className="text-xs text-slate-400">Listagem de boletos da Atend-Car</p>
+        </div>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button onClick={lidarComExportarCSV}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-2.5 rounded-lg transition-all border border-slate-700">
+            📥 CSV
+          </button>
+          <button onClick={() => { setBoletoEditando(null); setModalAberto(true); }}
+            className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10">
+            + Novo Boleto
+          </button>
+        </div>
+      </div>
+
+      <div className="px-5 py-3 border-b border-atend-border flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex gap-1 flex-wrap bg-slate-900/40 p-1 rounded-xl border border-atend-border/50">
+          {[
+            { chave: 'todos', rotulo: 'Todos', icone: '📋' },
+            { chave: 'pendentes', rotulo: 'Pendentes', icone: '⏳' },
+            { chave: 'pagos', rotulo: 'Pagos', icone: '✅' },
+            { chave: 'vencendo', rotulo: 'Vencendo Hoje', icone: '🔴' },
+          ].map(({ chave, rotulo, icone }) => (
+            <button
+              key={chave}
+              onClick={() => { setFiltroStatus(chave); setSelecionados(new Set()); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
+                filtroStatus === chave
+                  ? 'bg-atend-verde/15 text-atend-verde shadow-sm shadow-atend-verde/10'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
+              }`}
+            >
+              <span className="text-[11px]">{icone}</span>
+              {rotulo}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-2 flex-1 sm:justify-end items-center">
+          <div className="relative">
+            <select
+              value={mesSelecionado}
+              onChange={(e) => { setMesSelecionado(e.target.value); setSelecionados(new Set()); }}
+              className="bg-slate-900/40 border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 [color-scheme:dark] appearance-none cursor-pointer"
+            >
+              {meses.map(({ valor, rotulo }) => (
+                <option key={valor} value={valor}>{rotulo}</option>
+              ))}
+            </select>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">📅</span>
+          </div>
+
+          <div className="relative flex-1 max-w-[200px]">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">🔍</span>
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar fornecedor..."
+              className="w-full bg-slate-900/40 border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-atend-verde/60 transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+              <th className="px-5 py-4 w-10">
+                <input
+                  type="checkbox"
+                  checked={boletosFiltrados.length > 0 && selecionados.size === boletosFiltrados.length}
+                  onChange={toggleSelecionarTodos}
+                  className="accent-atend-verde w-4 h-4"
+                />
+              </th>
+              <th className="px-5 py-4">Fornecedor / Descrição</th>
+              <th className="px-5 py-4">Valor</th>
+              <th className="px-5 py-4">Vencimento</th>
+              <th className="px-5 py-4">Status</th>
+              <th className="px-5 py-4">Categoria</th>
+              <th className="px-5 py-4 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
+            {carregandoBoletos ? (
+              <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-500 italic">Carregando boletos...</td></tr>
+            ) : boletosFiltrados.length === 0 ? (
+              <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-500 italic bg-slate-900/10">📦 Nenhum boleto cadastrado no período atual.</td></tr>
+            ) : (
+              boletosFiltrados.map((boleto) => (
+                <tr key={boleto.id} className={`hover:bg-slate-900/20 transition-colors ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
+                  <td className="px-5 py-4">
+                    <input type="checkbox" checked={selecionados.has(boleto.id)}
+                      onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
+                      className="accent-atend-verde w-4 h-4 disabled:opacity-30" />
+                  </td>
+                  <td className="px-5 py-4 font-medium text-white">{boleto.fornecedor}</td>
+                  <td className="px-5 py-4">{formatarMoeda(boleto.valor)}</td>
+                  <td className="px-5 py-4 text-slate-400">
+                    {new Date(boleto.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                    {boleto.vencimento === hoje && boleto.status !== 'Pago' && <span className="ml-2 text-[10px] font-bold text-rose-400 uppercase">Hoje</span>}
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      boleto.status === 'Pago' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                    }`}>{boleto.status}</span>
+                  </td>
+                  <td className="px-5 py-4 text-slate-400 text-xs">
+                    {boleto.categoria ? (
+                      <span className="bg-slate-800/50 px-2 py-0.5 rounded text-slate-300">{boleto.categoria}</span>
+                    ) : '-'}
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button onClick={() => { setBoletoEditando(boleto); setModalAberto(true); }}
+                        className="text-xs font-semibold text-sky-400 hover:opacity-80 border border-sky-500/30 bg-sky-500/5 px-2.5 py-1 rounded transition-all" title="Editar">✏️</button>
+                      {boleto.status !== 'Pago' && (
+                        <button onClick={() => lidarComPagar(boleto.id)}
+                          className="text-xs font-semibold text-atend-verde hover:opacity-80 border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all" title="Pagar">✔</button>
+                      )}
+                      <button onClick={() => setConfirmExcluir({ aberto: true, boletoId: boleto.id })}
+                        className="text-xs font-semibold text-rose-400 hover:opacity-80 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all" title="Excluir">🗑</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          {boletosFiltrados.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-atend-border bg-slate-900/40 text-sm font-semibold">
+                <td colSpan="2" className="px-5 py-4 text-slate-400 uppercase tracking-wider text-xs">Total</td>
+                <td className="px-5 py-4 text-white">{formatarMoeda(totalExibido)}</td>
+                <td colSpan="4"></td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      <div className="md:hidden divide-y divide-atend-border/50">
+        {carregandoBoletos ? (
+          <div className="px-5 py-10 text-center text-slate-500 italic">Carregando boletos...</div>
+        ) : boletosFiltrados.length === 0 ? (
+          <div className="px-5 py-10 text-center text-slate-500 italic">📦 Nenhum boleto cadastrado no período atual.</div>
+        ) : (
+          boletosFiltrados.map((boleto) => (
+            <div key={boleto.id} className={`px-5 py-4 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
+              <div className="flex items-start gap-3">
+                <div className="pt-0.5">
+                  <input type="checkbox" checked={selecionados.has(boleto.id)}
+                    onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
+                    className="accent-atend-verde w-4 h-4 disabled:opacity-30" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-white truncate">{boleto.fornecedor}</p>
+                  <p className="text-lg font-bold text-white mt-0.5">{formatarMoeda(boleto.valor)}</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-xs text-slate-400">
+                      {new Date(boleto.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      {boleto.vencimento === hoje && boleto.status !== 'Pago' && <span className="ml-1.5 text-[10px] font-bold text-rose-400 uppercase">Hoje</span>}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      boleto.status === 'Pago' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                    }`}>{boleto.status}</span>
+                    {boleto.categoria && (
+                      <span className="text-[10px] bg-slate-800/50 px-1.5 py-0.5 rounded text-slate-400">{boleto.categoria}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <button onClick={() => { setBoletoEditando(boleto); setModalAberto(true); }}
+                    className="text-xs font-semibold text-sky-400 border border-sky-500/30 bg-sky-500/5 px-3 py-1.5 rounded transition-all">✏️</button>
+                  {boleto.status !== 'Pago' && (
+                    <button onClick={() => lidarComPagar(boleto.id)}
+                      className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-3 py-1.5 rounded transition-all">✔ Pagar</button>
+                  )}
+                  <button onClick={() => setConfirmExcluir({ aberto: true, boletoId: boleto.id })}
+                    className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-3 py-1.5 rounded transition-all">🗑</button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+        {boletosFiltrados.length > 0 && (
+          <div className="px-5 py-4 bg-slate-900/40 border-t border-atend-border">
+            <div className="flex justify-between text-sm font-semibold">
+              <span className="text-slate-400 uppercase tracking-wider text-xs">Total</span>
+              <span className="text-white">{formatarMoeda(totalExibido)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  const PaginaPerfil = () => {
+    const [senhaAtual, setSenhaAtual] = useState('');
+    const [senhaNova, setSenhaNova] = useState('');
+    const [confirmSenha, setConfirmSenha] = useState('');
+    const [msgSenha, setMsgSenha] = useState('');
+    const [carregandoSenha, setCarregandoSenha] = useState(false);
+
+    const handleAlterarSenha = async (e) => {
+      e.preventDefault();
+      setMsgSenha('');
+      if (senhaNova !== confirmSenha) { setMsgSenha('As senhas não conferem'); return; }
+      if (senhaNova.length < 3) { setMsgSenha('A nova senha deve ter pelo menos 3 caracteres'); return; }
+      setCarregandoSenha(true);
+      const token = localStorage.getItem('token');
+      try {
+        const resposta = await fetch('http://localhost:8000/usuarios/alterar-senha', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ senha_atual: senhaAtual, senha_nova: senhaNova }),
+        });
+        const dados = await resposta.json();
+        if (resposta.ok) {
+          setMsgSenha('✅ Senha alterada com sucesso!');
+          setSenhaAtual(''); setSenhaNova(''); setConfirmSenha('');
+        } else {
+          setMsgSenha(`⚠️ ${dados.detail}`);
+        }
+      } catch { setMsgSenha('⚠️ Erro de conexão com o servidor'); }
+      finally { setCarregandoSenha(false); }
+    };
+
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
+          <div className="px-6 py-5 border-b border-atend-border">
+            <h3 className="text-lg font-bold text-white">Meu Perfil</h3>
+            <p className="text-xs text-slate-400">Informações da sua conta</p>
+          </div>
+          <div className="px-6 py-5 space-y-4">
+            <div className="flex items-center gap-4 pb-4 border-b border-atend-border/50">
+              <div className="w-14 h-14 rounded-full bg-atend-verde/10 border border-atend-verde/20 flex items-center justify-center text-2xl">
+                {usuarioPerfil.sexo === 'M' ? '👨‍🔧' : '👩‍🔧'}
+              </div>
+              <div>
+                <p className="text-lg font-bold text-white">{usuarioPerfil.nome}</p>
+                <p className="text-xs text-slate-400">Gênero: {usuarioPerfil.sexo === 'M' ? 'Masculino' : 'Feminino'}</p>
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-white mb-4">Alterar Senha</h4>
+              <form onSubmit={handleAlterarSenha} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Senha Atual</label>
+                  <input type="password" value={senhaAtual} onChange={(e) => setSenhaAtual(e.target.value)}
+                    placeholder="Sua senha atual"
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Nova Senha</label>
+                  <input type="password" value={senhaNova} onChange={(e) => setSenhaNova(e.target.value)}
+                    placeholder="Nova senha"
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Confirmar Nova Senha</label>
+                  <input type="password" value={confirmSenha} onChange={(e) => setConfirmSenha(e.target.value)}
+                    placeholder="Repita a nova senha"
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
+                </div>
+                {msgSenha && (
+                  <div className={`text-xs rounded-lg p-3 text-center ${msgSenha.includes('✅') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                    {msgSenha}
+                  </div>
+                )}
+                <button type="submit" disabled={carregandoSenha}
+                  className="bg-atend-verde hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10">
+                  {carregandoSenha ? 'Alterando...' : 'Alterar Senha'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // TELA DE LOGIN
   if (!estaLogado) {
     return (
       <div className="min-h-screen bg-atend-bg flex items-center justify-center font-sans px-4">
-        
-        {/* Caixa de Login Glassmorphism */}
         <div className="w-full max-w-md bg-atend-card border border-atend-border p-8 rounded-2xl shadow-2xl relative overflow-hidden">
-          
-          {/* Neon */}
           <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71]"></div>
-          
-          {/* Logo */}
           <div className="text-center mb-8">
-            <span className="text-4xl inline-block mb-3"></span>
-            <h1 className="text-xl font-black tracking-wide uppercase text-white">
+            <h1 className="text-xl tracking-wide uppercase text-white"
+              style={{ fontFamily: "'Sonic Extra Bold', 'Segoe UI', 'Arial Black', system-ui, sans-serif", fontWeight: 900 }}>
               FINANCEIRO <span className="text-atend-verde">ATEND-CAR</span>
             </h1>
             <p className="text-xs text-slate-400 mt-1">Restrito para a Gestão Financeira</p>
           </div>
-
-          {/* Form */}
           <form onSubmit={lidarComLogin} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Usuário:
-              </label>
-              <input 
-                type="text" 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Usuário:</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
                 placeholder="Ex: gui"
-                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
-                required
-              />
+                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Senha:
-              </label>
-              <input 
-                type="password" 
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Senha:</label>
+              <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)}
                 placeholder="••••••"
-                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
-                required
-              />
+                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
             </div>
-
-            {/* Alerta de erro*/}
-            {erro && (
-              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg p-3 text-center animate-pulse">
-                ⚠️ {erro}
-              </div>
-            )}
-
-            <button 
-              type="submit"
-              className="w-full bg-atend-verde hover:opacity-90 text-slate-950 font-bold uppercase tracking-wider text-xs py-3.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10 mt-2"
-            >
-              Login
-            </button>
+            {erro && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg p-3 text-center animate-pulse">⚠️ {erro}</div>}
+            <button type="submit"
+              className="w-full bg-atend-verde hover:opacity-90 text-slate-950 font-bold uppercase tracking-wider text-xs py-3.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10 mt-2">Login</button>
           </form>
-
         </div>
       </div>
     );
   }
 
-  // ==============================================================================
-  // RENDERIZAÇÃO DO DASHBOARD PRINCIPAL
-  // ==============================================================================
+  // PAINEL PRINCIPAL
   return (
-    <div className="min-h-screen bg-atend-bg text-slate-100 font-sans">
-      
-      {/* CABEÇALHO (HEADER) */}
-      <header className="border-b border-atend-border bg-atend-card/80 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🔧</span>
-            <div>
-              <h1 className="text-xl font-bold tracking-wide uppercase text-white">
-                FINANCEIRO <span className="text-atend-verde">ATEND-CAR</span>
-              </h1>
-              <p className="text-xs text-slate-400">Painel de Gestão Financeira</p>
-            </div>
+    <div className="min-h-screen bg-atend-bg text-slate-100 font-sans flex">
+      <Sidebar
+        aberta={sidebarAberta}
+        setAberta={setSidebarAberta}
+        paginaAtual={paginaAtual}
+        setPaginaAtual={setPaginaAtual}
+        onSair={lidarComSair}
+        tema={tema}
+        onTemaChange={setTema}
+        notificacoes={notificacoes}
+        usuarioAdmin={usuarioAdmin}
+      />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="border-b border-atend-border bg-atend-card/80 backdrop-blur sticky top-0 z-30">
+          <div className="flex items-center justify-between px-4 py-3.5">
+            <button
+              onClick={() => setSidebarAberta((prev) => !prev)}
+              className="text-slate-400 hover:text-white text-xl p-1"
+              aria-label="Abrir menu"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h1 className="text-lg font-bold tracking-wide uppercase text-white">
+              FINANCEIRO <span className="text-atend-verde">ATEND-CAR</span>
+            </h1>
+            <div className="w-6" />
           </div>
-          <button 
-            onClick={() => setEstaLogado(false)}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium px-4 py-2 rounded-md transition-colors border border-slate-700"
-          >
-            Sair
+        </header>
+
+        <main className="flex-1 px-4 py-6 max-w-7xl w-full mx-auto">
+          {paginaAtual === 'dashboard' && (
+            <>
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6">
+                <div>
+                  <p className="text-sm text-slate-400">
+                    {usuarioPerfil.sexo === 'M' ? 'Bem-vindo de volta,' : 'Bem-vinda de volta,'}
+                  </p>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">{usuarioPerfil.nome}</h2>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">Hoje</p>
+                  <p className="text-sm font-medium text-atend-verde">
+                    {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/^\w/, (c) => c.toUpperCase())}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent"></div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-atend-verde/10 text-atend-verde border border-atend-verde/20">Mês</span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{formatarMoeda(totalPago)}</span>
+                </div>
+                <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20">Aberto</span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{formatarMoeda(totalAPagar)}</span>
+                </div>
+                <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/20">Atenção</span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{formatarMoeda(vencendoHoje)}</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
+                <TabelaBoletos />
+              </div>
+            </>
+          )}
+
+          {paginaAtual === 'boletos' && (
+            <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
+              <TabelaBoletos />
+            </div>
+          )}
+
+          {paginaAtual === 'perfil' && <PaginaPerfil />}
+          {paginaAtual === 'fornecedores' && <FornecedoresPage mostrarToast={mostrarToast} />}
+          {paginaAtual === 'relatorios' && <RelatoriosPage />}
+          {paginaAtual === 'auditoria' && <AuditoriaPage />}
+          {paginaAtual === 'admin' && usuarioAdmin && <AdminPage mostrarToast={mostrarToast} />}
+        </main>
+      </div>
+
+      {selecionados.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <button onClick={lidarComPagarLote}
+            className="bg-atend-verde hover:opacity-90 text-slate-950 text-sm font-bold px-6 py-3 rounded-xl shadow-2xl shadow-atend-verde/20 flex items-center gap-2 transition-all">
+            ✔ Pagar Selecionados ({selecionados.size})
           </button>
         </div>
-      </header>
+      )}
 
-      {/* CONTEÚDO PRINCIPAL */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        
-        {/* Tratamento dinâmico de Gênero e Nome real vindos do banco */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <p className="text-sm text-slate-400">
-              {usuarioPerfil.sexo === 'M' ? 'Bem-vindo de volta,' : 'Bem-vinda de volta,'}
-            </p>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              {usuarioPerfil.nome}
-            </h2>
-          </div>
-        <div className="text-right">
-          <p className="text-xs text-slate-500 uppercase tracking-wider">Período Atual</p>
-          <p className="text-sm font-medium text-atend-verde">
-            {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^\w/, (c) => c.toUpperCase())}
-          </p>
-        </div>
-        </div>
-
-        {/* CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          
-          {/* Card 1: Total Pago */}
-          <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-6 shadow-2xl">
-            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent"></div>
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
-              <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-atend-verde/10 text-atend-verde border border-atend-verde/20">Mês Atual</span>
-            </div>
-            <span className="text-3xl font-extrabold tracking-tight text-white">R$ 0,00</span>
-          </div>
-
-          {/* Card 2: A Pagar */}
-          <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-6 shadow-2xl">
-            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
-              <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20">Em aberto</span>
-            </div>
-            <span className="text-3xl font-extrabold tracking-tight text-white">R$ 0,00</span>
-          </div>
-
-          {/* Card 3: Vencendo Hoje */}
-          <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-6 shadow-2xl">
-            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
-              <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/20">Atenção</span>
-            </div>
-            <span className="text-3xl font-extrabold tracking-tight text-white">R$ 0,00</span>
-          </div>
-
-        </div>
-
-        {/* SEÇÃO DA TABELA DE BOLETOS */}
-        <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-          <div className="px-6 py-5 border-b border-atend-border flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-bold text-white">Contas a Pagar</h3>
-              <p className="text-xs text-slate-400">Listagem de boletos da Atend-Car</p>
-            </div>
-            <button className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg transition-all shadow-lg shadow-atend-verde/10">
-              + Novo Boleto
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-6 py-4">Fornecedor / Descrição</th>
-                  <th className="px-6 py-4">Valor</th>
-                  <th className="px-6 py-4">Vencimento</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
-                
-                {/* Verificação Inteligente: Exibe mensagem limpa se a lista estiver vazia */}
-                {boletos.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-10 text-center text-slate-500 italic bg-slate-900/10">
-                      📦 Nenhum boleto cadastrado no período atual.
-                    </td>
-                  </tr>
-                ) : (
-                  // Mapeamento dinâmico preparado para receber o futuro fetch do back-end
-                  boletos.map((boleto) => (
-                    <tr key={boleto.id} className="hover:bg-slate-900/20 transition-colors">
-                      <td className="px-6 py-4 font-medium text-white">{boleto.fornecedor}</td>
-                      <td className="px-6 py-4">R$ {boleto.valor.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-slate-400">{boleto.vencimento}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          boleto.status === 'Pago' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
-                        }`}>
-                          {boleto.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        {boleto.status !== 'Pago' && (
-                          <button className="text-xs font-semibold text-atend-verde hover:opacity-80 border border-atend-verde/30 bg-atend-verde/5 px-3 py-1 rounded transition-all">
-                            Dar Baixa
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-      </main>
+      <Toast mensagem={toast.mensagem} tipo={toast.tipo} visivel={toast.visivel} onFechar={fecharToast} />
+      <ModalNovoBoleto aberto={modalAberto} onFechar={() => { setModalAberto(false); setBoletoEditando(null); }} onBoletoCriado={fetchBoletos} boletoEditando={boletoEditando} />
+      <ConfirmDialog
+        aberto={confirmExcluir.aberto}
+        titulo="Excluir Boleto"
+        mensagem="Tem certeza que deseja excluir este boleto? Esta ação não pode ser desfeita."
+        onConfirmar={lidarComExcluir}
+        onCancelar={() => setConfirmExcluir({ aberto: false, boletoId: null })}
+      />
     </div>
   );
 }

@@ -1,9 +1,104 @@
 @import "tailwindcss";
 
-/* Injeta as cores da Atend-Car estendendo o tema padrão do Tailwind v4 */
+@font-face {
+  font-family: 'Sonic Extra Bold';
+  src: url('/fonts/sonicbt-extrabold.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --color-atend-bg: #0f1117;
-  --color-atend-card: #1a1d27;
-  --color-atend-border: #2a2d3a;
+  --color-atend-bg: var(--c-bg);
+  --color-atend-card: var(--c-card);
+  --color-atend-border: var(--c-border);
   --color-atend-verde: #2ecc71;
+  --animate-fade-in: fade-in 0.3s ease-out;
+}
+
+:root,
+[data-theme="dark"] {
+  --c-bg: #0f1117;
+  --c-card: #1a1d27;
+  --c-border: #2a2d3a;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --c-bg: #f1f5f9;
+  --c-card: #ffffff;
+  --c-border: #e2e8f0;
+  color-scheme: light;
+}
+
+/* Corrige cor do texto base no tema claro */
+[data-theme="light"] body {
+  color: #1e293b;
+}
+
+[data-theme="light"] .text-white {
+  color: #1e293b;
+}
+
+[data-theme="light"] .text-slate-400 {
+  color: #64748b;
+}
+
+[data-theme="light"] .text-slate-500 {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .text-slate-300 {
+  color: #475569;
+}
+
+[data-theme="light"] .placeholder-slate-600::placeholder {
+  color: #cbd5e1;
+}
+
+[data-theme="light"] .bg-slate-800 {
+  background-color: #e2e8f0;
+}
+
+[data-theme="light"] .bg-slate-800:hover {
+  background-color: #cbd5e1;
+}
+
+[data-theme="light"] .text-slate-200 {
+  color: #334155;
+}
+
+[data-theme="light"] .border-slate-700 {
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .bg-slate-900\/30 {
+  background-color: #f8fafc;
+}
+
+[data-theme="light"] .bg-slate-900\/40 {
+  background-color: #f1f5f9;
+}
+
+[data-theme="light"] .bg-slate-900\/20 {
+  background-color: #f8fafc;
+}
+
+[data-theme="light"] .hover\:bg-slate-900\/20:hover {
+  background-color: #f1f5f9;
+}
+
+[data-theme="light"] .divide-atend-border\/50 > * {
+  border-color: #e2e8f0;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

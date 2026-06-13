@@ -5,8 +5,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 frontend/.local/
-
-# Logs de erro de pacotes do Node
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
@@ -21,13 +22,13 @@ backend/venv/
 backend/env/
 backend/.venv/
 backend/.env
-
-# Banco de dados local SQLite (Dados sensíveis da oficina)
 backend/*.db
-backend/financeiro.db
+backend/*.sqlite3
+**/__pycache__/
+*.pyc
 
 # ==============================================================================
-# CONFIGURAÇÕES DO EDITOR E SISTEMA (VS CODE & SISTEMAS)
+# CONFIGURAÇÕES DO EDITOR E SISTEMA
 # ==============================================================================
 .vscode/*
 !.vscode/extensions.json
