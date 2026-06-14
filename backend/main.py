@@ -4,8 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from passlib.context import CryptContext
-import sqlite3
-from database import get_connection
+
+from database import get_connection, Base, engine
 import jwt
 import os
 import csv
@@ -19,6 +19,8 @@ from database import migrar
 migrar()
 
 app = FastAPI()
+
+Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
@@ -91,7 +93,7 @@ def get_usuario_logado(token: str = Depends(oauth2_scheme)):
 
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id, nome, sexo, admin FROM usuarios WHERE username = ?", (username,))
+    cursor.execute("SELECT id, nome, sexo, admin FROM usuarios WHERE username = %s", (username,))
     usuario = cursor.fetchone()
     conexao.close()
 
@@ -112,7 +114,7 @@ def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
         conexao = get_connection()
         cursor = conexao.cursor()
         cursor.execute(
-            "INSERT INTO auditoria (acao, entidade, entidade_id, usuario_id, detalhes) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO auditoria (acao, entidade, entidade_id, usuario_id, detalhes) VALUES (%s, %s, %s, %s, %s)",
             (acao, entidade, entidade_id, usuario_id, detalhes)
         )
         conexao.commit()
@@ -133,12 +135,12 @@ def criar_usuario(usuario: UsuarioCreate):
     cursor = conexao.cursor()
     try:
         cursor.execute(
-            "INSERT INTO usuarios (nome, sexo, username, senha) VALUES (?, ?, ?, ?)",
+            "INSERT INTO usuarios (nome, sexo, username, senha) VALUES (%s, %s, %s, %s) RETURNING id",
             (usuario.nome, usuario.sexo, usuario.username, senha_criptografada)
         )
+        usuario_id = cursor.fetchone()[0]
         conexao.commit()
-        usuario_id = cursor.lastrowid
-    except sqlite3.IntegrityError as e:
+    except Exception as e:
         conexao.close()
         raise HTTPException(status_code=400, detail=f"Erro de cadastro: {e}")
     conexao.close()
@@ -150,7 +152,7 @@ def criar_usuario(usuario: UsuarioCreate):
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id, senha, nome, sexo, admin FROM usuarios WHERE username = ?", (form_data.username,))
+    cursor.execute("SELECT id, senha, nome, sexo, admin FROM usuarios WHERE username = %s", (form_data.username,))
     usuario_db = cursor.fetchone()
     conexao.close()
 
@@ -176,7 +178,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 def perfil_usuario(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id, nome, sexo, username, admin FROM usuarios WHERE id = ?", (usuario["id"],))
+    cursor.execute("SELECT id, nome, sexo, username, admin FROM usuarios WHERE id = %s", (usuario["id"],))
     dados = cursor.fetchone()
     conexao.close()
     return {"id": dados[0], "nome": dados[1], "sexo": dados[2], "username": dados[3], "admin": bool(dados[4])}
@@ -186,14 +188,14 @@ def perfil_usuario(usuario: dict = Depends(get_usuario_logado)):
 def excluir_usuario(usuario_id: int, admin: dict = Depends(get_admin_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM usuarios WHERE id = ?", (usuario_id,))
+    cursor.execute("SELECT id FROM usuarios WHERE id = %s", (usuario_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     if usuario_id == admin["id"]:
         conexao.close()
         raise HTTPException(status_code=400, detail="Você não pode excluir seu próprio usuário")
-    cursor.execute("DELETE FROM usuarios WHERE id = ?", (usuario_id,))
+    cursor.execute("DELETE FROM usuarios WHERE id = %s", (usuario_id,))
     conexao.commit()
     conexao.close()
     registrar_auditoria("excluir", "usuario", usuario_id, admin["id"], f"Usuário ID {usuario_id} excluído")
@@ -204,13 +206,13 @@ def excluir_usuario(usuario_id: int, admin: dict = Depends(get_admin_logado)):
 def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT senha FROM usuarios WHERE id = ?", (usuario["id"],))
+    cursor.execute("SELECT senha FROM usuarios WHERE id = %s", (usuario["id"],))
     senha_criptografada_db = cursor.fetchone()[0]
     if not pwd_context.verify(dados.senha_atual, senha_criptografada_db):
         conexao.close()
         raise HTTPException(status_code=400, detail="Senha atual incorreta")
     senha_nova_cripto = pwd_context.hash(dados.senha_nova)
-    cursor.execute("UPDATE usuarios SET senha = ? WHERE id = ?", (senha_nova_cripto, usuario["id"]))
+    cursor.execute("UPDATE usuarios SET senha = %s WHERE id = %s", (senha_nova_cripto, usuario["id"]))
     conexao.commit()
     conexao.close()
     return {"mensagem": "Senha alterada com sucesso!"}
@@ -234,7 +236,7 @@ def listar_usuarios(admin: dict = Depends(get_admin_logado)):
 def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depends(get_admin_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM usuarios WHERE id = ?", (usuario_id,))
+    cursor.execute("SELECT id FROM usuarios WHERE id = %s", (usuario_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -242,14 +244,14 @@ def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depen
     campos = []
     valores = []
     if dados.nome is not None:
-        campos.append("nome = ?"); valores.append(dados.nome)
+        campos.append("nome = %s"); valores.append(dados.nome)
     if dados.username is not None:
-        campos.append("username = ?"); valores.append(dados.username)
+        campos.append("username = %s"); valores.append(dados.username)
     if dados.admin is not None:
-        campos.append("admin = ?"); valores.append(dados.admin)
+        campos.append("admin = %s"); valores.append(dados.admin)
     if campos:
         valores.append(usuario_id)
-        cursor.execute(f"UPDATE usuarios SET {', '.join(campos)} WHERE id = ?", valores)
+        cursor.execute(f"UPDATE usuarios SET {', '.join(campos)} WHERE id = %s", valores)
         conexao.commit()
     conexao.close()
     registrar_auditoria("editar", "usuario", usuario_id, admin["id"], f"Campos alterados: {', '.join(campos)}")
@@ -275,10 +277,10 @@ def criar_fornecedor(dados: FornecedorCreate, usuario: dict = Depends(get_usuari
     conexao = get_connection()
     cursor = conexao.cursor()
     try:
-        cursor.execute("INSERT INTO fornecedores (nome, cnpj, telefone, email) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO fornecedores (nome, cnpj, telefone, email) VALUES (%s, %s, %s, %s) RETURNING id",
                        (dados.nome, dados.cnpj, dados.telefone, dados.email))
+        for_id = cursor.fetchone()[0]
         conexao.commit()
-        for_id = cursor.lastrowid
     except Exception as e:
         conexao.close()
         raise HTTPException(status_code=400, detail=f"Erro ao criar fornecedor: {e}")
@@ -291,23 +293,23 @@ def criar_fornecedor(dados: FornecedorCreate, usuario: dict = Depends(get_usuari
 def atualizar_fornecedor(fornecedor_id: int, dados: FornecedorUpdate, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id,))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
     campos = []
     valores = []
     if dados.nome is not None:
-        campos.append("nome = ?"); valores.append(dados.nome)
+        campos.append("nome = %s"); valores.append(dados.nome)
     if dados.cnpj is not None:
-        campos.append("cnpj = ?"); valores.append(dados.cnpj)
+        campos.append("cnpj = %s"); valores.append(dados.cnpj)
     if dados.telefone is not None:
-        campos.append("telefone = ?"); valores.append(dados.telefone)
+        campos.append("telefone = %s"); valores.append(dados.telefone)
     if dados.email is not None:
-        campos.append("email = ?"); valores.append(dados.email)
+        campos.append("email = %s"); valores.append(dados.email)
     if campos:
         valores.append(fornecedor_id)
-        cursor.execute(f"UPDATE fornecedores SET {', '.join(campos)} WHERE id = ?", valores)
+        cursor.execute(f"UPDATE fornecedores SET {', '.join(campos)} WHERE id = %s", valores)
         conexao.commit()
     conexao.close()
     return {"mensagem": "Fornecedor atualizado com sucesso!"}
@@ -317,11 +319,11 @@ def atualizar_fornecedor(fornecedor_id: int, dados: FornecedorUpdate, usuario: d
 def excluir_fornecedor(fornecedor_id: int, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id,))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
-    cursor.execute("DELETE FROM fornecedores WHERE id = ?", (fornecedor_id,))
+    cursor.execute("DELETE FROM fornecedores WHERE id = %s", (fornecedor_id,))
     conexao.commit()
     conexao.close()
     registrar_auditoria("excluir", "fornecedor", fornecedor_id, usuario["id"], "")
@@ -356,10 +358,11 @@ def criar_boleto(boleto: BoletoCreate, usuario: dict = Depends(get_usuario_logad
     try:
         cursor.execute("""
             INSERT INTO boletos (fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id)
-            VALUES (?, ?, ?, ?, 'Pendente', ?, ?)
+            VALUES (%s, %s, %s, %s, 'Pendente', %s, %s)
+            RETURNING id
         """, (boleto.fornecedor, boleto.valor, boleto.vencimento, boleto.codigo_barras, boleto.categoria, usuario["id"]))
+        boleto_id = cursor.fetchone()[0]
         conexao.commit()
-        boleto_id = cursor.lastrowid
     except Exception as e:
         conexao.close()
         raise HTTPException(status_code=400, detail=f"Erro ao cadastrar boleto: {e}")
@@ -372,25 +375,25 @@ def criar_boleto(boleto: BoletoCreate, usuario: dict = Depends(get_usuario_logad
 def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM boletos WHERE id = ?", (boleto_id,))
+    cursor.execute("SELECT id FROM boletos WHERE id = %s", (boleto_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Boleto não encontrado")
     campos = []
     valores = []
     if dados.fornecedor is not None:
-        campos.append("fornecedor = ?"); valores.append(dados.fornecedor)
+        campos.append("fornecedor = %s"); valores.append(dados.fornecedor)
     if dados.valor is not None:
-        campos.append("valor = ?"); valores.append(dados.valor)
+        campos.append("valor = %s"); valores.append(dados.valor)
     if dados.vencimento is not None:
-        campos.append("vencimento = ?"); valores.append(dados.vencimento)
+        campos.append("vencimento = %s"); valores.append(dados.vencimento)
     if dados.codigo_barras is not None:
-        campos.append("codigo_barras = ?"); valores.append(dados.codigo_barras)
+        campos.append("codigo_barras = %s"); valores.append(dados.codigo_barras)
     if dados.categoria is not None:
-        campos.append("categoria = ?"); valores.append(dados.categoria)
+        campos.append("categoria = %s"); valores.append(dados.categoria)
     if campos:
         valores.append(boleto_id)
-        cursor.execute(f"UPDATE boletos SET {', '.join(campos)} WHERE id = ?", valores)
+        cursor.execute(f"UPDATE boletos SET {', '.join(campos)} WHERE id = %s", valores)
         conexao.commit()
     conexao.close()
     registrar_auditoria("editar", "boleto", boleto_id, usuario["id"], f"Campos alterados: {', '.join(campos)}")
@@ -401,11 +404,11 @@ def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(g
 def pagar_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM boletos WHERE id = ?", (boleto_id,))
+    cursor.execute("SELECT id FROM boletos WHERE id = %s", (boleto_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Boleto não encontrado")
-    cursor.execute("UPDATE boletos SET status = 'Pago' WHERE id = ?", (boleto_id,))
+    cursor.execute("UPDATE boletos SET status = 'Pago' WHERE id = %s", (boleto_id,))
     conexao.commit()
     conexao.close()
     registrar_auditoria("pagar", "boleto", boleto_id, usuario["id"], "Boleto pago")
@@ -418,8 +421,8 @@ def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuar
         raise HTTPException(status_code=400, detail="Nenhum boleto selecionado")
     conexao = get_connection()
     cursor = conexao.cursor()
-    placeholders = ",".join("?" for _ in dados.ids)
-    cursor.execute(f"UPDATE boletos SET status = 'Pago' WHERE id IN ({placeholders})", dados.ids)
+    placeholders = ",".join("%s" for _ in dados.ids)
+    cursor.execute(f"UPDATE boletos SET status = 'Pago' WHERE id IN ({placeholders})", tuple(dados.ids))
     conexao.commit()
     linhas_afetadas = cursor.rowcount
     conexao.close()
@@ -432,11 +435,11 @@ def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuar
 def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM boletos WHERE id = ?", (boleto_id,))
+    cursor.execute("SELECT id FROM boletos WHERE id = %s", (boleto_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Boleto não encontrado")
-    cursor.execute("DELETE FROM boletos WHERE id = ?", (boleto_id,))
+    cursor.execute("DELETE FROM boletos WHERE id = %s", (boleto_id,))
     conexao.commit()
     conexao.close()
     registrar_auditoria("excluir", "boleto", boleto_id, usuario["id"], "Boleto excluído")
@@ -448,9 +451,9 @@ def notificacoes(usuario: dict = Depends(get_usuario_logado)):
     hoje = datetime.now().strftime("%Y-%m-%d")
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento = ? AND status != 'Pago'", (hoje,))
+    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento = %s AND status != 'Pago'", (hoje,))
     vence_hoje = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento < ? AND status != 'Pago'", (hoje,))
+    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento < %s AND status != 'Pago'", (hoje,))
     atrasados = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM boletos WHERE status != 'Pago'")
     pendentes = cursor.fetchone()[0]
@@ -507,19 +510,19 @@ def relatorio_mensal(ano: int, mes: int, usuario: dict = Depends(get_usuario_log
 
     cursor.execute("""
         SELECT COALESCE(SUM(valor), 0) FROM boletos
-        WHERE vencimento >= ? AND vencimento < ? AND status = 'Pago'
+        WHERE vencimento >= %s AND vencimento < %s AND status = 'Pago'
     """, (inicio, fim))
     total_pago = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT COALESCE(SUM(valor), 0) FROM boletos
-        WHERE vencimento >= ? AND vencimento < ? AND status != 'Pago'
+        WHERE vencimento >= %s AND vencimento < %s AND status != 'Pago'
     """, (inicio, fim))
     total_pendente = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT COALESCE(COUNT(*), 0) FROM boletos
-        WHERE vencimento >= ? AND vencimento < ?
+        WHERE vencimento >= %s AND vencimento < %s
     """, (inicio, fim))
     total_boletos = cursor.fetchone()[0]
 
@@ -539,7 +542,7 @@ def relatorio_fornecedores(ano: int, mes: int, usuario: dict = Depends(get_usuar
     cursor = conexao.cursor()
     cursor.execute("""
         SELECT fornecedor, COALESCE(SUM(valor), 0), COUNT(*)
-        FROM boletos WHERE vencimento >= ? AND vencimento < ?
+        FROM boletos WHERE vencimento >= %s AND vencimento < %s
         GROUP BY fornecedor ORDER BY SUM(valor) DESC
     """, (inicio, fim))
     dados = [{"fornecedor": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
@@ -559,7 +562,7 @@ def relatorio_categorias(ano: int, mes: int, usuario: dict = Depends(get_usuario
     cursor = conexao.cursor()
     cursor.execute("""
         SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
-        FROM boletos WHERE vencimento >= ? AND vencimento < ?
+        FROM boletos WHERE vencimento >= %s AND vencimento < %s
         GROUP BY categoria ORDER BY SUM(valor) DESC
     """, (inicio, fim))
     dados = [{"categoria": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
