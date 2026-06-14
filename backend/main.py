@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from passlib.context import CryptContext
 import sqlite3
+from database import get_connection
 import jwt
 import os
 import csv
@@ -21,7 +22,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:3000")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,7 +89,7 @@ def get_usuario_logado(token: str = Depends(oauth2_scheme)):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido")
 
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id, nome, sexo, admin FROM usuarios WHERE username = ?", (username,))
     usuario = cursor.fetchone()
@@ -108,7 +109,7 @@ def get_admin_logado(usuario: dict = Depends(get_usuario_logado)):
 
 def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
     try:
-        conexao = sqlite3.connect("financeiro.db")
+        conexao = get_connection()
         cursor = conexao.cursor()
         cursor.execute(
             "INSERT INTO auditoria (acao, entidade, entidade_id, usuario_id, detalhes) VALUES (?, ?, ?, ?, ?)",
@@ -128,7 +129,7 @@ def root():
 @app.post("/usuarios/")
 def criar_usuario(usuario: UsuarioCreate):
     senha_criptografada = pwd_context.hash(usuario.senha)
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     try:
         cursor.execute(
@@ -147,7 +148,7 @@ def criar_usuario(usuario: UsuarioCreate):
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id, senha, nome, sexo, admin FROM usuarios WHERE username = ?", (form_data.username,))
     usuario_db = cursor.fetchone()
@@ -173,7 +174,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.get("/usuarios/me")
 def perfil_usuario(usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id, nome, sexo, username, admin FROM usuarios WHERE id = ?", (usuario["id"],))
     dados = cursor.fetchone()
@@ -183,7 +184,7 @@ def perfil_usuario(usuario: dict = Depends(get_usuario_logado)):
 
 @app.delete("/usuarios/{usuario_id}")
 def excluir_usuario(usuario_id: int, admin: dict = Depends(get_admin_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM usuarios WHERE id = ?", (usuario_id,))
     if not cursor.fetchone():
@@ -201,7 +202,7 @@ def excluir_usuario(usuario_id: int, admin: dict = Depends(get_admin_logado)):
 
 @app.patch("/usuarios/alterar-senha")
 def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT senha FROM usuarios WHERE id = ?", (usuario["id"],))
     senha_criptografada_db = cursor.fetchone()[0]
@@ -219,7 +220,7 @@ def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logad
 
 @app.get("/admin/usuarios/")
 def listar_usuarios(admin: dict = Depends(get_admin_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id, nome, sexo, username, admin FROM usuarios ORDER BY id")
     usuarios = []
@@ -231,7 +232,7 @@ def listar_usuarios(admin: dict = Depends(get_admin_logado)):
 
 @app.put("/admin/usuarios/{usuario_id}")
 def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depends(get_admin_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM usuarios WHERE id = ?", (usuario_id,))
     if not cursor.fetchone():
@@ -259,7 +260,7 @@ def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depen
 
 @app.get("/fornecedores/")
 def listar_fornecedores(usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id, nome, cnpj, telefone, email, criado_em FROM fornecedores ORDER BY nome")
     fornecedores = []
@@ -271,7 +272,7 @@ def listar_fornecedores(usuario: dict = Depends(get_usuario_logado)):
 
 @app.post("/fornecedores/")
 def criar_fornecedor(dados: FornecedorCreate, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     try:
         cursor.execute("INSERT INTO fornecedores (nome, cnpj, telefone, email) VALUES (?, ?, ?, ?)",
@@ -288,7 +289,7 @@ def criar_fornecedor(dados: FornecedorCreate, usuario: dict = Depends(get_usuari
 
 @app.put("/fornecedores/{fornecedor_id}")
 def atualizar_fornecedor(fornecedor_id: int, dados: FornecedorUpdate, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id,))
     if not cursor.fetchone():
@@ -314,7 +315,7 @@ def atualizar_fornecedor(fornecedor_id: int, dados: FornecedorUpdate, usuario: d
 
 @app.delete("/fornecedores/{fornecedor_id}")
 def excluir_fornecedor(fornecedor_id: int, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id,))
     if not cursor.fetchone():
@@ -331,7 +332,7 @@ def excluir_fornecedor(fornecedor_id: int, usuario: dict = Depends(get_usuario_l
 
 @app.get("/boletos/")
 def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("""
         SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em
@@ -350,7 +351,7 @@ def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
 
 @app.post("/boletos/")
 def criar_boleto(boleto: BoletoCreate, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     try:
         cursor.execute("""
@@ -369,7 +370,7 @@ def criar_boleto(boleto: BoletoCreate, usuario: dict = Depends(get_usuario_logad
 
 @app.put("/boletos/{boleto_id}")
 def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM boletos WHERE id = ?", (boleto_id,))
     if not cursor.fetchone():
@@ -398,7 +399,7 @@ def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(g
 
 @app.patch("/boletos/{boleto_id}/pagar")
 def pagar_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM boletos WHERE id = ?", (boleto_id,))
     if not cursor.fetchone():
@@ -415,7 +416,7 @@ def pagar_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
 def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuario_logado)):
     if not dados.ids:
         raise HTTPException(status_code=400, detail="Nenhum boleto selecionado")
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     placeholders = ",".join("?" for _ in dados.ids)
     cursor.execute(f"UPDATE boletos SET status = 'Pago' WHERE id IN ({placeholders})", dados.ids)
@@ -429,7 +430,7 @@ def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuar
 
 @app.delete("/boletos/{boleto_id}")
 def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM boletos WHERE id = ?", (boleto_id,))
     if not cursor.fetchone():
@@ -445,7 +446,7 @@ def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
 @app.get("/boletos/notificacoes")
 def notificacoes(usuario: dict = Depends(get_usuario_logado)):
     hoje = datetime.now().strftime("%Y-%m-%d")
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento = ? AND status != 'Pago'", (hoje,))
     vence_hoje = cursor.fetchone()[0]
@@ -459,7 +460,7 @@ def notificacoes(usuario: dict = Depends(get_usuario_logado)):
 
 @app.get("/boletos/exportar-csv")
 def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, criado_em FROM boletos ORDER BY vencimento")
     linhas = cursor.fetchall()
@@ -483,7 +484,7 @@ def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
 
 @app.get("/categorias/")
 def listar_categorias(usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT DISTINCT categoria FROM boletos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria")
     categorias = [linha[0] for linha in cursor.fetchall()]
@@ -501,7 +502,7 @@ def relatorio_mensal(ano: int, mes: int, usuario: dict = Depends(get_usuario_log
     else:
         fim = f"{ano:04d}-{mes+1:02d}-01"
 
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
 
     cursor.execute("""
@@ -534,7 +535,7 @@ def relatorio_fornecedores(ano: int, mes: int, usuario: dict = Depends(get_usuar
     else:
         fim = f"{ano:04d}-{mes+1:02d}-01"
 
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("""
         SELECT fornecedor, COALESCE(SUM(valor), 0), COUNT(*)
@@ -554,7 +555,7 @@ def relatorio_categorias(ano: int, mes: int, usuario: dict = Depends(get_usuario
     else:
         fim = f"{ano:04d}-{mes+1:02d}-01"
 
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("""
         SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
@@ -570,7 +571,7 @@ def relatorio_categorias(ano: int, mes: int, usuario: dict = Depends(get_usuario
 
 @app.get("/auditoria/")
 def listar_auditoria(usuario: dict = Depends(get_usuario_logado)):
-    conexao = sqlite3.connect("financeiro.db")
+    conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("""
         SELECT a.id, a.acao, a.entidade, a.entidade_id, a.usuario_id, a.detalhes, a.criado_em, u.nome
