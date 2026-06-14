@@ -73,3 +73,8 @@ class Auditoria(Base):
 def get_connection():
     """Return a raw psycopg2 connection for manual query execution."""
     return psycopg2.connect(DATABASE_URL)
+
+
+def migrar():
+    """Cria as tabelas no banco caso ainda não existam."""
+    Base.metadata.create_all(bind=engine)
