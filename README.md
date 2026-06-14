@@ -1,4 +1,4 @@
-# Atend-Car Financeiro
+# AutoShop Payables
 
 Sistema de gestão financeira desenvolvido para a oficina **Atend-Car**. Controle completo de contas a pagar, boletos, fornecedores e relatórios.
 
