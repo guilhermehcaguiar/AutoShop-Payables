@@ -618,7 +618,7 @@ function App() {
             <div>
               <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Usuário:</label>
               <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex: gui"
+                placeholder="Ex: user"
                 className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
             </div>
             <div>
