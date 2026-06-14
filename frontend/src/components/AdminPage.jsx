@@ -88,7 +88,12 @@ function AdminPage({ mostrarToast }) {
     finally { setCarregandoCriar(false); }
   };
 
-  if (carregando) return <p className="text-slate-500 italic py-10 text-center">Carregando...</p>;
+  if (carregando) return (
+    <div className="flex items-center justify-center py-16 gap-2 text-slate-500">
+      <span className="inline-block w-5 h-5 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
+      <span className="text-sm italic">Carregando...</span>
+    </div>
+  );
 
   return (
     <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">

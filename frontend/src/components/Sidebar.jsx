@@ -100,16 +100,17 @@ function ItemSidebar({ icone, rotulo, pagina, atual, onClick, fechar, badge }) {
   return (
     <button
       onClick={() => { onClick(pagina); fechar(); }}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all relative ${
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 relative overflow-hidden ${
         atual === pagina
-          ? 'bg-atend-verde/10 text-atend-verde border border-atend-verde/20'
-          : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          ? 'bg-atend-verde/10 text-atend-verde border border-atend-verde/20 shadow-sm shadow-atend-verde/5'
+          : 'text-slate-400 hover:text-white hover:bg-slate-800/50 active:scale-[0.98]'
       }`}
     >
+      {atual === pagina && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-atend-verde rounded-full" />}
       <span className="text-lg">{icone}</span>
       <span className="flex-1 text-left">{rotulo}</span>
       {badge !== null && badge !== undefined && (
-        <span className="bg-rose-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
+        <span className="bg-rose-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 animate-pulse">
           {badge}
         </span>
       )}

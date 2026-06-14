@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
 import ModalNovoBoleto from './components/ModalNovoBoleto';
@@ -33,7 +33,6 @@ function App() {
   const [notificacoes, setNotificacoes] = useState(null);
   const [usuarioAdmin, setUsuarioAdmin] = useState(false);
 
-  // Aplica o tema no <html>
   useEffect(() => {
     const root = document.documentElement;
     if (tema === 'system') {
@@ -316,7 +315,7 @@ function App() {
       </div>
 
       <div className="px-5 py-3 border-b border-atend-border flex flex-col sm:flex-row items-center gap-3">
-        <div className="flex gap-1 flex-wrap bg-slate-900/40 p-1 rounded-xl border border-atend-border/50">
+        <div className="flex gap-1 flex-wrap bg-atend-bg p-1 rounded-xl border border-atend-border/50">
           {[
             { chave: 'todos', rotulo: 'Todos', icone: '📋' },
             { chave: 'pendentes', rotulo: 'Pendentes', icone: '⏳' },
@@ -343,7 +342,8 @@ function App() {
             <select
               value={mesSelecionado}
               onChange={(e) => { setMesSelecionado(e.target.value); setSelecionados(new Set()); }}
-              className="bg-slate-900/40 border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 [color-scheme:dark] appearance-none cursor-pointer"
+              className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}
             >
               {meses.map(({ valor, rotulo }) => (
                 <option key={valor} value={valor}>{rotulo}</option>
@@ -359,7 +359,7 @@ function App() {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar fornecedor..."
-              className="w-full bg-slate-900/40 border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-atend-verde/60 transition-colors"
+              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-atend-verde/60 transition-colors"
             />
           </div>
         </div>
@@ -387,12 +387,21 @@ function App() {
           </thead>
           <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
             {carregandoBoletos ? (
-              <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-500 italic">Carregando boletos...</td></tr>
+              <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-500 italic">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="inline-block w-4 h-4 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
+                  Carregando...
+                </div>
+              </td></tr>
             ) : boletosFiltrados.length === 0 ? (
-              <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-500 italic bg-slate-900/10">📦 Nenhum boleto cadastrado no período atual.</td></tr>
+              <tr><td colSpan="7" className="px-5 py-12 text-center text-slate-500 bg-slate-900/10">
+                <div className="text-2xl mb-2">📦</div>
+                <p className="text-sm font-medium text-slate-400">Nenhum boleto cadastrado</p>
+                <p className="text-xs text-slate-500 mt-0.5">Neste período ou filtro selecionado</p>
+              </td></tr>
             ) : (
               boletosFiltrados.map((boleto) => (
-                <tr key={boleto.id} className={`hover:bg-slate-900/20 transition-colors ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
+                <tr key={boleto.id} className={`hover:bg-slate-900/20 even:bg-slate-900/10 transition-colors ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5 even:bg-rose-500/10' : ''}`}>
                   <td className="px-5 py-4">
                     <input type="checkbox" checked={selecionados.has(boleto.id)}
                       onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
@@ -444,9 +453,17 @@ function App() {
 
       <div className="md:hidden divide-y divide-atend-border/50">
         {carregandoBoletos ? (
-          <div className="px-5 py-10 text-center text-slate-500 italic">Carregando boletos...</div>
+          <div className="px-5 py-10 text-center text-slate-500 italic">
+            <div className="flex items-center justify-center gap-2">
+              <span className="inline-block w-4 h-4 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
+              Carregando...
+            </div>
+          </div>
         ) : boletosFiltrados.length === 0 ? (
-          <div className="px-5 py-10 text-center text-slate-500 italic">📦 Nenhum boleto cadastrado no período atual.</div>
+          <div className="px-5 py-10 text-center text-slate-500">
+            <div className="text-2xl mb-1">📦</div>
+            <p className="text-sm font-medium text-slate-400">Nenhum boleto cadastrado</p>
+          </div>
         ) : (
           boletosFiltrados.map((boleto) => (
             <div key={boleto.id} className={`px-5 py-4 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
@@ -646,7 +663,8 @@ function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <h1 className="text-lg font-bold tracking-wide uppercase text-white">
+            <h1 className="text-lg tracking-wide uppercase text-white"
+              style={{ fontFamily: "'Sonic Extra Bold', 'Segoe UI', 'Arial Black', system-ui, sans-serif", fontWeight: 900 }}>
               FINANCEIRO <span className="text-atend-verde">ATEND-CAR</span>
             </h1>
             <div className="w-6" />
@@ -671,32 +689,32 @@ function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent"></div>
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
-                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-atend-verde/10 text-atend-verde border border-atend-verde/20">Mês</span>
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{formatarMoeda(totalPago)}</span>
-                </div>
-                <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
-                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20">Aberto</span>
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{formatarMoeda(totalAPagar)}</span>
-                </div>
-                <div className="relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
-                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/20">Atenção</span>
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{formatarMoeda(vencendoHoje)}</span>
-                </div>
+<div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200">
+              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent"></div>
+              <div className="flex justify-between items-start mb-3">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
+                <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-atend-verde/10 text-atend-verde border border-atend-verde/20">Mês</span>
               </div>
+              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-atend-verde transition-colors">{formatarMoeda(totalPago)}</span>
+            </div>
+            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200">
+              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
+              <div className="flex justify-between items-start mb-3">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
+                <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20">Aberto</span>
+              </div>
+              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-amber-400 transition-colors">{formatarMoeda(totalAPagar)}</span>
+            </div>
+            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200">
+              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
+              <div className="flex justify-between items-start mb-3">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
+                <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/20">Atenção</span>
+              </div>
+              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-rose-400 transition-colors">{formatarMoeda(vencendoHoje)}</span>
+            </div>
+          </div>
 
               <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
                 <TabelaBoletos />

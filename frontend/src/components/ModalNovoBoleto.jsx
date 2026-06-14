@@ -113,7 +113,7 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Vencimento</label>
             <input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors [color-scheme:dark]"
+              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors "
               required />
           </div>
           <div>

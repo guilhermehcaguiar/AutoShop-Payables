@@ -36,18 +36,23 @@ function RelatoriosPage() {
       <div className="flex items-center gap-4">
         <h2 className="text-xl font-bold text-white">Relatório {nomeMes} {ano}</h2>
         <select value={mes} onChange={(e) => setMes(Number(e.target.value))}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 [color-scheme:dark]">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 ">
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
             <option key={m} value={m}>{new Date(ano, m - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase())}</option>
           ))}
         </select>
         <select value={ano} onChange={(e) => setAno(Number(e.target.value))}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 [color-scheme:dark]">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 ">
           {[agora.getFullYear(), agora.getFullYear() - 1].map((a) => (<option key={a} value={a}>{a}</option>))}
         </select>
       </div>
 
-      {carregando ? <p className="text-slate-500 italic">Carregando...</p> : (
+      {carregando ? (
+          <div className="flex items-center justify-center py-16 gap-2 text-slate-500">
+            <span className="inline-block w-5 h-5 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
+            <span className="text-sm italic">Carregando relatório...</span>
+          </div>
+        ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl relative overflow-hidden">
