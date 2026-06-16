@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api.js';
 
 function AuditoriaPage() {
   const [registros, setRegistros] = useState([]);
@@ -8,7 +9,7 @@ function AuditoriaPage() {
     const fetchAuditoria = async () => {
       const token = localStorage.getItem('token');
       try {
-        const resp = await fetch('http://localhost:8000/auditoria/', {
+        const resp = await apiFetch('/auditoria/', {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (resp.ok) setRegistros(await resp.json());

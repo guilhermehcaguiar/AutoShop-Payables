@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api.js';
 import ConfirmDialog from './ConfirmDialog';
 
 function AdminPage({ mostrarToast }) {
@@ -15,7 +16,7 @@ function AdminPage({ mostrarToast }) {
   const fetchUsuarios = async () => {
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch('http://localhost:8000/admin/usuarios/', {
+      const resp = await apiFetch('/admin/usuarios/', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resp.ok) setUsuarios(await resp.json());
@@ -27,7 +28,7 @@ function AdminPage({ mostrarToast }) {
   const toggleAdmin = async (usuario) => {
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch(`http://localhost:8000/admin/usuarios/${usuario.id}`, {
+      const resp = await apiFetch(`/admin/usuarios/${usuario.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ admin: usuario.admin ? 0 : 1 }),
@@ -41,7 +42,7 @@ function AdminPage({ mostrarToast }) {
     if (!id) return;
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch(`http://localhost:8000/usuarios/${id}`, {
+      const resp = await apiFetch(`/usuarios/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -55,7 +56,7 @@ function AdminPage({ mostrarToast }) {
     e.preventDefault();
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch(`http://localhost:8000/admin/usuarios/${editando.id}`, {
+      const resp = await apiFetch(`/admin/usuarios/${editando.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ nome: form.nome, username: form.username }),
@@ -70,7 +71,7 @@ function AdminPage({ mostrarToast }) {
     setCarregandoCriar(true);
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch('http://localhost:8000/usuarios/', {
+      const resp = await apiFetch('/usuarios/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(formCriar),

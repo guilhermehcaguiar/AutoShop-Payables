@@ -4,11 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from passlib.context import CryptContext
-from database import get_connection, Base, engine, migrar   # <-- NEW IMPORTS
-from database import get_connection, Base, engine, migrar   # <-- NEW IMPORTS
-from database import get_connection, Base, engine, migrar   # <-- NEW IMPORTS
-
-from database import get_connection, Base, engine
+from database import get_connection, Base, engine, migrar
 import jwt
 import os
 import csv
@@ -18,12 +14,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from database import migrar
 migrar()
 
 app = FastAPI()
-
-Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,

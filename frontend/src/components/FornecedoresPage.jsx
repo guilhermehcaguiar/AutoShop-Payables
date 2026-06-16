@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api.js';
 import ConfirmDialog from './ConfirmDialog';
 
 function FornecedoresPage({ mostrarToast }) {
@@ -13,7 +14,7 @@ function FornecedoresPage({ mostrarToast }) {
   const fetchFornecedores = async () => {
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch('http://localhost:8000/fornecedores/', {
+      const resp = await apiFetch('/fornecedores/', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resp.ok) setFornecedores(await resp.json());
@@ -39,11 +40,11 @@ function FornecedoresPage({ mostrarToast }) {
     setErro('');
     const token = localStorage.getItem('token');
     const url = editando
-      ? `http://localhost:8000/fornecedores/${editando.id}`
-      : 'http://localhost:8000/fornecedores/';
+      ? `/fornecedores/${editando.id}`
+      : '/fornecedores/';
     const method = editando ? 'PUT' : 'POST';
     try {
-      const resp = await fetch(url, {
+      const resp = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(form),
@@ -64,7 +65,7 @@ function FornecedoresPage({ mostrarToast }) {
     if (!id) return;
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch(`http://localhost:8000/fornecedores/${id}`, {
+      const resp = await apiFetch(`/fornecedores/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });

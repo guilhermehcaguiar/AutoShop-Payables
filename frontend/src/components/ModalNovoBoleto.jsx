@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api.js';
 
 function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [fornecedor, setFornecedor] = useState('');
@@ -27,16 +28,16 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
     setErro('');
     const token = localStorage.getItem('token');
     const headers = { 'Authorization': `Bearer ${token}` };
-    fetch('http://localhost:8000/categorias/', { headers })
+    apiFetch('/categorias/', { headers })
       .then((r) => r.ok && r.json()).then(setCategorias).catch(() => {});
-    fetch('http://localhost:8000/fornecedores/', { headers })
+    apiFetch('/fornecedores/', { headers })
       .then((r) => r.ok && r.json()).then(setFornecedores).catch(() => {});
   }, [aberto, boletoEditando]);
 
   const autoSalvarFornecedor = async (token) => {
     const existe = fornecedores.some((f) => f.nome.toLowerCase() === fornecedor.toLowerCase());
     if (!existe && fornecedor.trim()) {
-      await fetch('http://localhost:8000/fornecedores/', {
+      await apiFetch('/fornecedores/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ nome: fornecedor.trim() }),
@@ -50,11 +51,11 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
     setCarregando(true);
     const token = localStorage.getItem('token');
     const url = editando
-      ? `http://localhost:8000/boletos/${boletoEditando.id}`
-      : 'http://localhost:8000/boletos/';
+      ? `/boletos/${boletoEditando.id}`
+      : '/boletos/';
     const method = editando ? 'PUT' : 'POST';
     try {
-      const resposta = await fetch(url, {
+      const resposta = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({

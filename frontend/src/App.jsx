@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { apiFetch } from './api.js';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
 import ModalNovoBoleto from './components/ModalNovoBoleto';
@@ -52,7 +53,7 @@ function App() {
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      const resp = await fetch('http://localhost:8000/boletos/notificacoes', {
+      const resp = await apiFetch('/boletos/notificacoes', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resp.ok) setNotificacoes(await resp.json());
@@ -79,7 +80,7 @@ function App() {
 
     setCarregandoBoletos(true);
     try {
-      const resposta = await fetch('http://localhost:8000/boletos/', {
+      const resposta = await apiFetch('/boletos/', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resposta.ok) {
@@ -115,7 +116,7 @@ function App() {
     dadosFormulario.append('password', senha);
 
     try {
-      const resposta = await fetch('http://localhost:8000/login', {
+      const resposta = await apiFetch('/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: dadosFormulario,
@@ -151,7 +152,7 @@ function App() {
   const lidarComPagar = async (boletoId) => {
     const token = localStorage.getItem('token');
     try {
-      const resposta = await fetch(`http://localhost:8000/boletos/${boletoId}/pagar`, {
+      const resposta = await apiFetch(`/boletos/${boletoId}/pagar`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -171,7 +172,7 @@ function App() {
     const token = localStorage.getItem('token');
     const ids = Array.from(selecionados);
     try {
-      const resposta = await fetch('http://localhost:8000/boletos/pagar-lote', {
+      const resposta = await apiFetch('/boletos/pagar-lote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -196,7 +197,7 @@ function App() {
     if (!boletoId) return;
     const token = localStorage.getItem('token');
     try {
-      const resposta = await fetch(`http://localhost:8000/boletos/${boletoId}`, {
+      const resposta = await apiFetch(`/boletos/${boletoId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -214,7 +215,7 @@ function App() {
   const lidarComExportarCSV = async () => {
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch('http://localhost:8000/boletos/exportar-csv', {
+      const resp = await apiFetch('/boletos/exportar-csv', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resp.ok) {
@@ -530,7 +531,7 @@ function App() {
       setCarregandoSenha(true);
       const token = localStorage.getItem('token');
       try {
-        const resposta = await fetch('http://localhost:8000/usuarios/alterar-senha', {
+        const resposta = await apiFetch('/usuarios/alterar-senha', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ senha_atual: senhaAtual, senha_nova: senhaNova }),

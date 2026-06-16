@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api.js';
 
 function RelatoriosPage() {
   const agora = new Date();
@@ -14,9 +15,9 @@ function RelatoriosPage() {
     const token = localStorage.getItem('token');
     try {
       const [respM, respF, respC] = await Promise.all([
-        fetch(`http://localhost:8000/relatorio/mensal?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`http://localhost:8000/relatorio/fornecedores?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`http://localhost:8000/relatorio/categorias?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/mensal?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/fornecedores?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
       if (respM.ok) setMensal(await respM.json());
       if (respF.ok) setPorFornecedor(await respF.json());
