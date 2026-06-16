@@ -18,9 +18,13 @@ migrar()
 
 app = FastAPI()
 
+CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:3000")
+if not CORS_ORIGIN or CORS_ORIGIN.strip() == "":
+    CORS_ORIGIN = "https://auto-shop-payables-k6h8nyj21-guihca-s-projects.vercel.app"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:3000")],
+    allow_origins=[CORS_ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
