@@ -18,13 +18,9 @@ migrar()
 
 app = FastAPI()
 
-CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:3000")
-if not CORS_ORIGIN or CORS_ORIGIN.strip() == "":
-    CORS_ORIGIN = "https://auto-shop-payables-k6h8nyj21-guihca-s-projects.vercel.app"
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[CORS_ORIGIN],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -218,8 +214,6 @@ def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logad
     return {"mensagem": "Senha alterada com sucesso!"}
 
 
-
-
 @app.get("/admin/usuarios/")
 def listar_usuarios(admin: dict = Depends(get_admin_logado)):
     conexao = get_connection()
@@ -255,9 +249,7 @@ def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depen
         conexao.commit()
     conexao.close()
     registrar_auditoria("editar", "usuario", usuario_id, admin["id"], f"Campos alterados: {', '.join(campos)}")
-    return {"mensagem": "Usuário atualizado com sucesso!"}
-
-
+    return {"mensagem": "Usuário updated com sucesso!"}
 
 
 @app.get("/fornecedores/")
@@ -328,8 +320,6 @@ def excluir_fornecedor(fornecedor_id: int, usuario: dict = Depends(get_usuario_l
     conexao.close()
     registrar_auditoria("excluir", "fornecedor", fornecedor_id, usuario["id"], "")
     return {"mensagem": "Fornecedor excluído com sucesso!"}
-
-
 
 
 @app.get("/boletos/")
@@ -483,8 +473,6 @@ def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
     )
 
 
-
-
 @app.get("/categorias/")
 def listar_categorias(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -493,8 +481,6 @@ def listar_categorias(usuario: dict = Depends(get_usuario_logado)):
     categorias = [linha[0] for linha in cursor.fetchall()]
     conexao.close()
     return categorias
-
-
 
 
 @app.get("/relatorio/mensal")
@@ -568,8 +554,6 @@ def relatorio_categorias(ano: int, mes: int, usuario: dict = Depends(get_usuario
     dados = [{"categoria": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
     conexao.close()
     return dados
-
-
 
 
 @app.get("/auditoria/")
