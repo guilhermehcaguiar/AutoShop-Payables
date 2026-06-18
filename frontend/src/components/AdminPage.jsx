@@ -542,18 +542,30 @@ function AdminPage({ mostrarToast }) {
             <div>
               <p className="text-sm font-medium text-white">Ativar Backup Semanal Automático</p>
               <p className="text-xs text-slate-500">
-                Status: {backupAtivo === null ? 'Verificando...' : backupAtivo ? <span className="text-atend-verde">Ativo</span> : 'Inativo'}
+                Status: {backupAtivo === null ? 'Verificando...' : backupAtivo ? <span className="text-atend-verde">Ativo</span> : <span className="text-slate-400">Inativo</span>}
                 {!smtpConfigurado && backupAtivo !== null && <span className="text-amber-400 ml-2">(SMTP não configurado)</span>}
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={toggleBackup}
-                className={`relative w-12 h-6 rounded-full transition-colors ${backupAtivo ? 'bg-atend-verde' : 'bg-slate-700'}`}>
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${backupAtivo ? 'translate-x-6' : 'translate-x-0'}`} />
+              <button
+                role="switch"
+                aria-checked={backupAtivo}
+                onClick={toggleBackup}
+                className={`relative w-14 h-7 rounded-full transition-all duration-300 ease-in-out outline-none focus-visible:ring-2 focus-visible:ring-atend-verde/60 focus-visible:ring-offset-2 focus-visible:ring-offset-atend-bg ${backupAtivo ? 'bg-atend-verde shadow-[0_0_12px_rgba(34,197,94,0.35)]' : 'bg-slate-700 hover:bg-slate-600'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ease-out ${backupAtivo ? 'translate-x-7 scale-105' : 'translate-x-0 scale-100'}`} />
               </button>
               <button onClick={executarBackup} disabled={executandoBackup || !backupAtivo || !smtpConfigurado}
-                className="bg-atend-verde hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all">
-                {executandoBackup ? '...' : 'Executar'}
+                className="relative bg-atend-verde hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all overflow-hidden">
+                {executandoBackup ? (
+                  <span className="flex items-center gap-1.5">
+                    <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Enviando</span>
+                  </span>
+                ) : 'Executar'}
               </button>
             </div>
           </div>

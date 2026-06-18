@@ -270,18 +270,30 @@ function App() {
   }, [boletos, mesSelecionado, filtroStatus, filtroDia, filtroFornecedor, hoje]);
 
   const totalPago = useMemo(
-    () => boletos.filter((b) => b.vencimento.startsWith(mesSelecionado) && b.status === 'Pago').reduce((s, b) => s + b.valor, 0),
-    [boletos, mesSelecionado]
+    () => boletos.filter((b) => {
+      if (!b.vencimento.startsWith(mesSelecionado)) return false;
+      if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
+      return b.status === 'Pago';
+    }).reduce((s, b) => s + b.valor, 0),
+    [boletos, mesSelecionado, filtroDia]
   );
 
   const totalAPagar = useMemo(
-    () => boletos.filter((b) => b.vencimento.startsWith(mesSelecionado) && b.status !== 'Pago').reduce((s, b) => s + b.valor, 0),
-    [boletos, mesSelecionado]
+    () => boletos.filter((b) => {
+      if (!b.vencimento.startsWith(mesSelecionado)) return false;
+      if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
+      return b.status !== 'Pago';
+    }).reduce((s, b) => s + b.valor, 0),
+    [boletos, mesSelecionado, filtroDia]
   );
 
   const vencendoHoje = useMemo(
-    () => boletos.filter((b) => b.vencimento === hoje && b.status !== 'Pago').reduce((s, b) => s + b.valor, 0),
-    [boletos, hoje]
+    () => boletos.filter((b) => {
+      if (b.vencimento !== hoje) return false;
+      if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
+      return b.status !== 'Pago';
+    }).reduce((s, b) => s + b.valor, 0),
+    [boletos, hoje, filtroDia]
   );
 
   const totalExibido = useMemo(

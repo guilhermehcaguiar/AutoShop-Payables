@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import psycopg2
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, Boolean
 
 BASE_DIR = Path(__file__).resolve().parent
 BASE_DIR = BASE_DIR.parent
@@ -60,6 +60,44 @@ class Boleto(Base):
     descricao = Column(String)
     metodo_pagamento = Column(String)
     banco = Column(String)
+    data_pagamento = Column(DateTime)
+    pago_por = Column(Integer)
+    deletado_em = Column(DateTime)
+
+
+class BoletoArquivado(Base):
+    __tablename__ = 'boletos_arquivados'
+    id = Column(Integer, primary_key=True)
+    boleto_original_id = Column(Integer)
+    fornecedor = Column(String, nullable=False)
+    valor = Column(Numeric(10, 2), nullable=False)
+    vencimento = Column(String, nullable=False)
+    codigo_barras = Column(String, nullable=False)
+    status = Column(String, default='Arquivado')
+    categoria = Column(String, nullable=False)
+    usuario_id = Column(Integer)
+    descricao = Column(String)
+    metodo_pagamento = Column(String)
+    banco = Column(String)
+    data_pagamento = Column(DateTime)
+    pago_por = Column(Integer)
+    criado_em = Column(DateTime)
+    arquivado_em = Column(DateTime, server_default='now()')
+
+
+class ModeloRecorrente(Base):
+    __tablename__ = 'modelos_recorrentes'
+    id = Column(Integer, primary_key=True)
+    fornecedor = Column(String, nullable=False)
+    valor = Column(Numeric(10, 2), nullable=False)
+    vencimento_dia = Column(Integer, nullable=False)
+    categoria = Column(String, nullable=False)
+    descricao = Column(String)
+    metodo_pagamento = Column(String)
+    banco = Column(String)
+    ativo = Column(Boolean, default=True)
+    criado_em = Column(DateTime, server_default='now()')
+    criado_por = Column(Integer)
 
 
 class Fornecedor(Base):
@@ -129,6 +167,9 @@ def migrar():
     _garantir_coluna(cursor, "boletos", "descricao", "TEXT")
     _garantir_coluna(cursor, "boletos", "metodo_pagamento", "VARCHAR(50)")
     _garantir_coluna(cursor, "boletos", "banco", "VARCHAR(100)")
+    _garantir_coluna(cursor, "boletos", "data_pagamento", "TIMESTAMP")
+    _garantir_coluna(cursor, "boletos", "pago_por", "INTEGER")
+    _garantir_coluna(cursor, "boletos", "deletado_em", "TIMESTAMP")
 
     cursor.execute("UPDATE boletos SET codigo_barras = '' WHERE codigo_barras IS NULL")
     cursor.execute("UPDATE boletos SET categoria = 'Sem categoria' WHERE categoria IS NULL")
@@ -158,6 +199,47 @@ def migrar():
     if cursor.fetchone()[0] == 0:
         valor_inicial = "true" if os.getenv("BACKUP_SCHEDULED", "false").lower() == "true" else "false"
         cursor.execute("INSERT INTO config (chave, valor) VALUES ('backup_auto', %s)", (valor_inicial,))
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS boletos_arquivados (
+            id SERIAL PRIMARY KEY,
+            boleto_original_id INTEGER,
+            fornecedor VARCHAR NOT NULL,
+            valor NUMERIC(10,2) NOT NULL,
+            vencimento VARCHAR NOT NULL,
+            codigo_barras VARCHAR NOT NULL,
+            status VARCHAR DEFAULT 'Arquivado',
+            categoria VARCHAR NOT NULL,
+            usuario_id INTEGER,
+            descricao TEXT,
+            metodo_pagamento VARCHAR(50),
+            banco VARCHAR(100),
+            data_pagamento TIMESTAMP,
+            pago_por INTEGER,
+            criado_em TIMESTAMP DEFAULT NOW(),
+            arquivado_em TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS modelos_recorrentes (
+            id SERIAL PRIMARY KEY,
+            fornecedor VARCHAR NOT NULL,
+            valor NUMERIC(10,2) NOT NULL,
+            vencimento_dia INTEGER NOT NULL,
+            categoria VARCHAR NOT NULL,
+            descricao TEXT,
+            metodo_pagamento VARCHAR(50),
+            banco VARCHAR(100),
+            ativo BOOLEAN DEFAULT TRUE,
+            criado_em TIMESTAMP DEFAULT NOW(),
+            criado_por INTEGER
+        )
+        """
+    )
 
     cursor.close()
     conn.close()

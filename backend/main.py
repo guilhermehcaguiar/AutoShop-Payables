@@ -13,7 +13,7 @@ import smtplib
 import json
 import zipfile
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -73,7 +73,6 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 EMAIL_TO_BACKUP = os.getenv("EMAIL_TO_BACKUP", "")
-BACKUP_SCHEDULED = os.getenv("BACKUP_SCHEDULED", "false").lower() == "true"
 
 class UsuarioCreate(BaseModel):
     nome: str
@@ -113,16 +112,16 @@ class BoletoCreate(BaseModel):
     fornecedor: str
     valor: float
     vencimento: str
-    codigo_barras: str
+    codigo_barras: str = ''
     categoria: str
     descricao: str | None = None
     metodo_pagamento: str | None = None
     banco: str | None = None
 
-    @validator("codigo_barras", "categoria", pre=True, always=True)
-    def nao_vazio(cls, v):
+    @validator("categoria", pre=True, always=True)
+    def cat_nao_vazio(cls, v):
         if not v or (isinstance(v, str) and v.strip() == ""):
-            raise ValueError("Este campo não pode estar vazio")
+            raise ValueError("Categoria não pode estar vazia")
         return v.strip()
 
 class BoletoUpdate(BaseModel):
@@ -135,10 +134,10 @@ class BoletoUpdate(BaseModel):
     metodo_pagamento: str | None = None
     banco: str | None = None
 
-    @validator("codigo_barras", "categoria", pre=True, always=True)
-    def nao_vazio_opt(cls, v):
+    @validator("categoria", pre=True, always=True)
+    def cat_nao_vazio_opt(cls, v):
         if v is not None and (not v or (isinstance(v, str) and v.strip() == "")):
-            raise ValueError("Este campo não pode estar vazio")
+            raise ValueError("Categoria não pode estar vazia")
         return v.strip() if isinstance(v, str) else v
 
 class BoletoCreateBackup(BaseModel):
@@ -442,8 +441,8 @@ def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("""
-        SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em, descricao, metodo_pagamento, banco
-        FROM boletos ORDER BY vencimento ASC
+        SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em, descricao, metodo_pagamento, banco, data_pagamento, pago_por
+        FROM boletos WHERE deletado_em IS NULL ORDER BY vencimento ASC
     """)
     boletos = []
     for linha in cursor.fetchall():
@@ -451,7 +450,8 @@ def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
             "id": linha[0], "fornecedor": linha[1], "valor": linha[2],
             "vencimento": linha[3], "codigo_barras": linha[4], "status": linha[5],
             "usuario_id": linha[6], "categoria": linha[7], "criado_em": linha[8],
-            "descricao": linha[9], "metodo_pagamento": linha[10], "banco": linha[11]
+            "descricao": linha[9], "metodo_pagamento": linha[10], "banco": linha[11],
+            "data_pagamento": linha[12], "pago_por": linha[13]
         })
     conexao.close()
     return boletos
@@ -461,7 +461,7 @@ def criar_boleto(boleto: BoletoCreate, background_tasks: BackgroundTasks, usuari
     conexao = get_connection()
     cursor = conexao.cursor()
     try:
-        cursor.execute("SELECT id FROM boletos WHERE codigo_barras = %s", (boleto.codigo_barras,))
+        cursor.execute("SELECT id FROM boletos WHERE codigo_barras = %s AND deletado_em IS NULL", (boleto.codigo_barras,))
         if cursor.fetchone():
             conexao.close()
             raise HTTPException(status_code=400, detail="Já existe um boleto cadastrado com este código de barras")
@@ -487,10 +487,11 @@ def criar_boleto(boleto: BoletoCreate, background_tasks: BackgroundTasks, usuari
 def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM boletos WHERE id = %s", (boleto_id,))
+    cursor.execute("SELECT id FROM boletos WHERE id = %s AND deletado_em IS NULL", (boleto_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Boleto não encontrado")
+
     campos = []
     valores = []
     if dados.fornecedor is not None:
@@ -530,15 +531,16 @@ def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(g
 def pagar_boleto(boleto_id: int, dados: PagarBoleto = None, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM boletos WHERE id = %s", (boleto_id,))
+    cursor.execute("SELECT id FROM boletos WHERE id = %s AND deletado_em IS NULL", (boleto_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Boleto não encontrado")
     if dados is not None:
-        cursor.execute("UPDATE boletos SET status = 'Pago', metodo_pagamento = %s, banco = %s WHERE id = %s",
-            (dados.metodo_pagamento, dados.banco, boleto_id))
+        cursor.execute("UPDATE boletos SET status = 'Pago', metodo_pagamento = %s, banco = %s, data_pagamento = NOW(), pago_por = %s WHERE id = %s",
+            (dados.metodo_pagamento, dados.banco, usuario["id"], boleto_id))
     else:
-        cursor.execute("UPDATE boletos SET status = 'Pago' WHERE id = %s", (boleto_id,))
+        cursor.execute("UPDATE boletos SET status = 'Pago', data_pagamento = NOW(), pago_por = %s WHERE id = %s",
+            (usuario["id"], boleto_id))
     conexao.commit()
     conexao.close()
     registrar_auditoria("pagar", "boleto", boleto_id, usuario["id"], "Boleto pago")
@@ -551,7 +553,8 @@ def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuar
     if not dados.ids:
         raise HTTPException(status_code=400, detail="Nenhum boleto selecionado")
     placeholders = ",".join(["%s"] * len(dados.ids))
-    cursor.execute("UPDATE boletos SET status = 'Pago' WHERE id IN ({})".format(placeholders), tuple(dados.ids))
+    cursor.execute("UPDATE boletos SET status = 'Pago', data_pagamento = NOW(), pago_por = %s WHERE id IN ({}) AND deletado_em IS NULL".format(placeholders),
+        (usuario["id"], *tuple(dados.ids)))
     conexao.commit()
     linhas_afetadas = cursor.rowcount
     conexao.close()
@@ -563,14 +566,14 @@ def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuar
 def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM boletos WHERE id = %s", (boleto_id,))
+    cursor.execute("SELECT id FROM boletos WHERE id = %s AND deletado_em IS NULL", (boleto_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Boleto não encontrado")
-    cursor.execute("DELETE FROM boletos WHERE id = %s", (boleto_id,))
+    cursor.execute("UPDATE boletos SET deletado_em = NOW() WHERE id = %s", (boleto_id,))
     conexao.commit()
     conexao.close()
-    registrar_auditoria("excluir", "boleto", boleto_id, usuario["id"], "Boleto excluído")
+    registrar_auditoria("excluir", "boleto", boleto_id, usuario["id"], "Boleto excluído (soft delete)")
     return {"mensagem": "Boleto excluído com sucesso!"}
 
 @app.get("/boletos/notificacoes")
@@ -578,11 +581,11 @@ def notificacoes(usuario: dict = Depends(get_usuario_logado)):
     hoje = datetime.now().strftime("%Y-%m-%d")
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento = %s AND status != 'Pago'", (hoje,))
+    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento = %s AND status != 'Pago' AND deletado_em IS NULL", (hoje,))
     vence_hoje = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento < %s AND status != 'Pago'", (hoje,))
+    cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento < %s AND status != 'Pago' AND deletado_em IS NULL", (hoje,))
     atrasados = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM boletos WHERE status != 'Pago'")
+    cursor.execute("SELECT COUNT(*) FROM boletos WHERE status != 'Pago' AND deletado_em IS NULL")
     pendentes = cursor.fetchone()[0]
     conexao.close()
     return {"vence_hoje": vence_hoje, "atrasados": atrasados, "pendentes": pendentes}
@@ -591,7 +594,7 @@ def notificacoes(usuario: dict = Depends(get_usuario_logado)):
 def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, criado_em, descricao, metodo_pagamento, banco FROM boletos ORDER BY vencimento")
+    cursor.execute("SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, criado_em, descricao, metodo_pagamento, banco FROM boletos WHERE deletado_em IS NULL ORDER BY vencimento")
     linhas = cursor.fetchall()
     conexao.close()
 
@@ -612,7 +615,7 @@ def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
 def listar_categorias(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT DISTINCT categoria FROM boletos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria")
+    cursor.execute("SELECT DISTINCT categoria FROM boletos WHERE categoria IS NOT NULL AND categoria != '' AND deletado_em IS NULL ORDER BY categoria")
     categorias = [linha[0] for linha in cursor.fetchall()]
     conexao.close()
     return categorias
@@ -630,19 +633,19 @@ def relatorio_mensal(ano: int, mes: int, usuario: dict = Depends(get_usuario_log
 
     cursor.execute("""
         SELECT COALESCE(SUM(valor), 0) FROM boletos
-        WHERE vencimento >= %s AND vencimento < %s AND status = 'Pago'
+        WHERE vencimento >= %s AND vencimento < %s AND status = 'Pago' AND deletado_em IS NULL
     """, (inicio, fim))
     total_pago = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT COALESCE(SUM(valor), 0) FROM boletos
-        WHERE vencimento >= %s AND vencimento < %s AND status != 'Pago'
+        WHERE vencimento >= %s AND vencimento < %s AND status != 'Pago' AND deletado_em IS NULL
     """, (inicio, fim))
     total_pendente = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT COALESCE(COUNT(*), 0) FROM boletos
-        WHERE vencimento >= %s AND vencimento < %s
+        WHERE vencimento >= %s AND vencimento < %s AND deletado_em IS NULL
     """, (inicio, fim))
     total_boletos = cursor.fetchone()[0]
 
@@ -662,13 +665,13 @@ def relatorio_fornecedores(ano: int, mes: int, status: str | None = None, usuari
     if status:
         cursor.execute("""
             SELECT fornecedor, COALESCE(SUM(valor), 0), COUNT(*)
-            FROM boletos WHERE vencimento >= %s AND vencimento < %s AND status = %s
+            FROM boletos WHERE vencimento >= %s AND vencimento < %s AND status = %s AND deletado_em IS NULL
             GROUP BY fornecedor ORDER BY SUM(valor) DESC
         """, (inicio, fim, status))
     else:
         cursor.execute("""
             SELECT fornecedor, COALESCE(SUM(valor), 0), COUNT(*)
-            FROM boletos WHERE vencimento >= %s AND vencimento < %s
+            FROM boletos WHERE vencimento >= %s AND vencimento < %s AND deletado_em IS NULL
             GROUP BY fornecedor ORDER BY SUM(valor) DESC
         """, (inicio, fim))
     dados = [{"fornecedor": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
@@ -688,13 +691,13 @@ def relatorio_categorias(ano: int, mes: int, status: str | None = None, usuario:
     if status:
         cursor.execute("""
             SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
-            FROM boletos WHERE vencimento >= %s AND vencimento < %s AND status = %s
+            FROM boletos WHERE vencimento >= %s AND vencimento < %s AND status = %s AND deletado_em IS NULL
             GROUP BY categoria ORDER BY SUM(valor) DESC
         """, (inicio, fim, status))
     else:
         cursor.execute("""
             SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
-            FROM boletos WHERE vencimento >= %s AND vencimento < %s
+            FROM boletos WHERE vencimento >= %s AND vencimento < %s AND deletado_em IS NULL
             GROUP BY categoria ORDER BY SUM(valor) DESC
         """, (inicio, fim))
     dados = [{"categoria": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
@@ -724,7 +727,7 @@ def listar_auditoria(usuario: dict = Depends(get_usuario_logado)):
 def bancos_utilizados(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT DISTINCT banco FROM boletos WHERE banco IS NOT NULL ORDER BY banco")
+    cursor.execute("SELECT DISTINCT banco FROM boletos WHERE banco IS NOT NULL AND deletado_em IS NULL ORDER BY banco")
     bancos = [linha[0] for linha in cursor.fetchall()]
     conexao.close()
     return bancos
@@ -733,7 +736,7 @@ def bancos_utilizados(usuario: dict = Depends(get_usuario_logado)):
 def categorias_utilizadas(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT DISTINCT categoria FROM boletos WHERE categoria IS NOT NULL ORDER BY categoria")
+    cursor.execute("SELECT DISTINCT categoria FROM boletos WHERE categoria IS NOT NULL AND deletado_em IS NULL ORDER BY categoria")
     categorias = [linha[0] for linha in cursor.fetchall()]
     conexao.close()
     return categorias
@@ -742,7 +745,7 @@ def categorias_utilizadas(usuario: dict = Depends(get_usuario_logado)):
 def desfazer_pagamento(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id, status FROM boletos WHERE id = %s", (boleto_id,))
+    cursor.execute("SELECT id, status FROM boletos WHERE id = %s AND deletado_em IS NULL", (boleto_id,))
     boleto = cursor.fetchone()
     if not boleto:
         conexao.close()
@@ -751,7 +754,7 @@ def desfazer_pagamento(boleto_id: int, usuario: dict = Depends(get_usuario_logad
         conexao.close()
         raise HTTPException(status_code=400, detail="Apenas boletos com status 'Pago' podem ter o pagamento desfeito")
     cursor.execute(
-        "UPDATE boletos SET status = 'Pendente', metodo_pagamento = NULL, banco = NULL WHERE id = %s",
+        "UPDATE boletos SET status = 'Pendente', metodo_pagamento = NULL, banco = NULL, data_pagamento = NULL, pago_por = NULL WHERE id = %s",
         (boleto_id,)
     )
     conexao.commit()
@@ -803,7 +806,7 @@ def projecao_fluxo(
             """
             SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
             FROM boletos
-            WHERE vencimento >= %s AND vencimento < %s AND status = 'Pendente'
+            WHERE vencimento >= %s AND vencimento < %s AND status = 'Pendente' AND deletado_em IS NULL
             GROUP BY categoria ORDER BY categoria
             """,
             (dt_inicio, dt_fim)
@@ -824,7 +827,7 @@ def projecao_fluxo(
             """
             SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
             FROM boletos
-            WHERE vencimento >= %s AND vencimento < %s AND status = 'Pendente'
+            WHERE vencimento >= %s AND vencimento < %s AND status = 'Pendente' AND deletado_em IS NULL
             GROUP BY categoria ORDER BY categoria
             """,
             (inicio_prox, fim_prox)
@@ -964,7 +967,7 @@ def executar_backup_agendado(admin_id: int = 0):
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute(
-        "SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em, descricao, metodo_pagamento, banco FROM boletos"
+        "SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em, descricao, metodo_pagamento, banco, data_pagamento, pago_por FROM boletos WHERE deletado_em IS NULL"
     )
     boletos = cursor.fetchall()
     colunas_boleto = [desc[0] for desc in cursor.description]
@@ -1038,8 +1041,18 @@ Robô de Backups Atend-Car"""
 
 @app.get("/admin/backup-agendado")
 def backup_agendado(admin: dict = Depends(get_current_admin_user)):
-    if not BACKUP_SCHEDULED:
-        return {"mensagem": "Backup automático desativado."}
+    try:
+        conexao = get_connection()
+        cursor = conexao.cursor()
+        cursor.execute("SELECT valor FROM config WHERE chave = 'backup_auto'")
+        row = cursor.fetchone()
+        cursor.close()
+        conexao.close()
+        ativo = row and row[0] == 'true'
+        if not ativo:
+            return {"mensagem": "Backup automático desativado nas configurações."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao verificar configuração de backup: {e}")
 
     if not all([SMTP_SERVER, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO_BACKUP]):
         raise HTTPException(status_code=500, detail="Configurações de SMTP incompletas.")
@@ -1052,3 +1065,39 @@ def backup_agendado(admin: dict = Depends(get_current_admin_user)):
     except Exception as e:
         print(f"[ERRO] Falha no backup agendado: {e}")
         raise HTTPException(status_code=500, detail=f"Falha no backup agendado: {e}")
+
+@app.post("/admin/recuperar-boleto/{boleto_id}")
+def recuperar_boleto(boleto_id: int, admin: dict = Depends(get_current_admin_user)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id FROM boletos WHERE id = %s AND deletado_em IS NOT NULL", (boleto_id,))
+    if not cursor.fetchone():
+        conexao.close()
+        raise HTTPException(status_code=404, detail="Boleto não encontrado ou não está excluído")
+    cursor.execute("UPDATE boletos SET deletado_em = NULL WHERE id = %s", (boleto_id,))
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("recuperar", "boleto", boleto_id, admin["id"], "Boleto recuperado da exclusão")
+    return {"mensagem": "Boleto recuperado com sucesso!"}
+
+@app.post("/admin/arquivar")
+def arquivar_boletos(admin: dict = Depends(get_current_admin_user)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    dois_meses_atras_dt = (datetime.now() - timedelta(days=60))
+
+    cursor.execute("""
+        INSERT INTO boletos_arquivados (boleto_original_id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, arquivado_em)
+        SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, NOW()
+        FROM boletos WHERE status = 'Pago' AND data_pagamento IS NOT NULL AND data_pagamento < %s AND deletado_em IS NULL
+    """, (dois_meses_atras_dt,))
+    arquivados = cursor.rowcount
+
+    cursor.execute("""
+        DELETE FROM boletos WHERE status = 'Pago' AND data_pagamento IS NOT NULL AND data_pagamento < %s AND deletado_em IS NULL
+    """, (dois_meses_atras_dt,))
+
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("arquivar", "sistema", 0, admin["id"], f"{arquivados} boletos arquivados automaticamente")
+    return {"mensagem": f"{arquivados} boletos arquivados com sucesso!", "arquivados": arquivados}
