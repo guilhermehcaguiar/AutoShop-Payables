@@ -288,11 +288,14 @@ function RelatoriosPage({ mostrarToast }) {
           doc.setTextColor(10, 10, 10);
           doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
-          const col2X = innerX + innerW * 0.7;
-          const col3X = innerX + innerW - colPad;
+          const col1W = innerW * 0.50;
+          const col2W = innerW * 0.30;
+          const col3W = innerW * 0.20;
+          const col2X = innerX + col1W;
+          const col3X = col2X + col2W;
           doc.text('Categoria', innerX + colPad, ct + 5);
-          doc.text('Valor', col2X + innerW * 0.3 - colPad, ct + 5, { align: 'right' });
-          doc.text('Qtd', col3X, ct + 5, { align: 'right' });
+          doc.text('Valor', col2X + col2W - colPad, ct + 5, { align: 'right' });
+          doc.text('Qtd', col3X + col3W - colPad, ct + 5, { align: 'right' });
 
           let cry = ct + headerRowH;
           cats.forEach((c, i) => {
@@ -302,8 +305,8 @@ function RelatoriosPage({ mostrarToast }) {
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
             doc.text(c.categoria, innerX + colPad, cry + 5.5);
-            doc.text(fmt(c.total), col2X + innerW * 0.3 - colPad, cry + 5.5, { align: 'right' });
-            doc.text(String(c.quantidade), col3X, cry + 5.5, { align: 'right' });
+            doc.text(fmt(c.total), col2X + col2W - colPad, cry + 5.5, { align: 'right' });
+            doc.text(String(c.quantidade), col3X + col3W - colPad, cry + 5.5, { align: 'right' });
             cry += dataRowH;
           });
           y = cry + 12;
