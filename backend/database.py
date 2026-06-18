@@ -9,7 +9,7 @@ import psycopg2
 from sqlalchemy import create_engine
 
 BASE_DIR = Path(__file__).resolve().parent
-BASE_DIR = BASE_DIR.parent  # project root
+BASE_DIR = BASE_DIR.parent
 dotenv_path = BASE_DIR / '.env'
 load_dotenv(dotenv_path=dotenv_path)
 
@@ -20,7 +20,6 @@ if not DATABASE_URL:
 if DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-# Pool mais resiliente: reconecta conexões mortas e limpa conexões inativas
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
@@ -92,12 +91,10 @@ class MetaCategoria(Base):
 
 
 def get_connection():
-    """Return a raw psycopg2 connection for manual query execution."""
     return psycopg2.connect(DATABASE_URL)
 
 
 def _executar_script(cursor, query, params=None):
-    """Executa um comando SQL ignorando erros de "já existe" para manter idempotência."""
     try:
         cursor.execute(query, params)
     except psycopg2.errors.DuplicateColumn:
@@ -109,7 +106,6 @@ def _executar_script(cursor, query, params=None):
 
 
 def _garantir_coluna(cursor, tabela, coluna, tipo_sql, permite_null=True, default=None, unique=False):
-    """Adiciona coluna se não existir; altera para NOT NULL se necessário (pode ser ajustado)."""
     null_sql = "NULL" if permite_null else "NOT NULL"
     default_sql = f"DEFAULT {default}" if default is not None else ""
     unique_sql = "UNIQUE" if unique else ""

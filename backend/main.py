@@ -11,7 +11,6 @@ import csv
 import io
 import smtplib
 import json
-import time
 import zipfile
 import tempfile
 from datetime import datetime
@@ -24,7 +23,6 @@ from dotenv import load_dotenv
 from calendar import monthrange
 
 load_dotenv()
-
 migrar()
 
 app = FastAPI()
@@ -48,8 +46,6 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 EMAIL_TO_BACKUP = os.getenv("EMAIL_TO_BACKUP", "")
 BACKUP_SCHEDULED = os.getenv("BACKUP_SCHEDULED", "false").lower() == "true"
 
-# === SCHEMAS PYDANTIC E MODELOS DE DADOS ===
-####################################################################################################
 class UsuarioCreate(BaseModel):
     nome: str
     sexo: str
@@ -110,6 +106,12 @@ class BoletoUpdate(BaseModel):
     metodo_pagamento: str | None = None
     banco: str | None = None
 
+    @validator("codigo_barras", "categoria", pre=True, always=True)
+    def nao_vazio_opt(cls, v):
+        if v is not None and (not v or (isinstance(v, str) and v.strip() == "")):
+            raise ValueError("Este campo não pode estar vazio")
+        return v.strip() if isinstance(v, str) else v
+
 class BoletoCreateBackup(BaseModel):
     fornecedor: str
     valor: float
@@ -124,6 +126,10 @@ class BoletoCreateBackup(BaseModel):
 class BoletoPagarLote(BaseModel):
     ids: list[int]
 
+class PagarBoleto(BaseModel):
+    metodo_pagamento: str | None = None
+    banco: str | None = None
+
 class BackupPayload(BaseModel):
     boletos: list[BoletoCreateBackup] | None = []
     fornecedores: list[FornecedorCreateBackup] | None = []
@@ -132,8 +138,10 @@ class MesclarCategorias(BaseModel):
     nome_antigo: str
     nome_novo: str
 
-# === DEPENDÊNCIAS E TRAVAS DE SEGURANÇA (JWT/ADMIN) ===
-####################################################################################################
+class MetaCreate(BaseModel):
+    categoria: str
+    limite_mensal: float
+
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 ALGORITHM = "HS256"
 
@@ -159,9 +167,7 @@ def get_usuario_logado(token: str = Depends(oauth2_scheme)):
 
     return {"id": usuario[0], "nome": usuario[1], "sexo": usuario[2], "admin": usuario[3]}
 
-
 security_bearer = HTTPBearer()
-
 
 def get_current_admin_user(credentials: HTTPAuthorizationCredentials = Depends(security_bearer)):
     token = credentials.credentials
@@ -189,7 +195,6 @@ def get_current_admin_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
     return {"id": usuario[0], "nome": usuario[1], "sexo": usuario[2], "admin": usuario[3]}
 
-
 def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
     try:
         conexao = get_connection()
@@ -203,26 +208,9 @@ def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
     except Exception:
         pass
 
-
-def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
-    try:
-        conexao = get_connection()
-        cursor = conexao.cursor()
-        cursor.execute(
-            "INSERT INTO auditoria (acao, entidade, entidade_id, usuario_id, detalhes) VALUES (%s, %s, %s, %s, %s)",
-            (acao, entidade, entidade_id, usuario_id, detalhes)
-        )
-        conexao.commit()
-        conexao.close()
-    except Exception:
-        pass
-
-# === ROTAS PÚBLICAS E AUTENTICAÇÃO ===
-####################################################################################################
 @app.get("/")
 def root():
     return {"mensagem": "API Financeiro Atend-Car rodando!", "docs": "/docs"}
-
 
 @app.post("/usuarios/")
 def criar_usuario(usuario: UsuarioCreate):
@@ -242,7 +230,6 @@ def criar_usuario(usuario: UsuarioCreate):
     conexao.close()
     registrar_auditoria("criar", "usuario", usuario_id, usuario_id, f"Usuário {usuario.username} criado")
     return {"mensagem": "Usuário criado com sucesso!"}
-
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -269,7 +256,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         "usuario": {"nome": nome_db, "sexo": sexo_db, "admin": bool(admin_db)}
     }
 
-
 @app.get("/usuarios/me")
 def perfil_usuario(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -278,7 +264,6 @@ def perfil_usuario(usuario: dict = Depends(get_usuario_logado)):
     dados = cursor.fetchone()
     conexao.close()
     return {"id": dados[0], "nome": dados[1], "sexo": dados[2], "username": dados[3], "admin": bool(dados[4])}
-
 
 @app.delete("/usuarios/{usuario_id}")
 def excluir_usuario(usuario_id: int, admin: dict = Depends(get_current_admin_user)):
@@ -297,7 +282,6 @@ def excluir_usuario(usuario_id: int, admin: dict = Depends(get_current_admin_use
     registrar_auditoria("excluir", "usuario", usuario_id, admin["id"], f"Usuário ID {usuario_id} excluído")
     return {"mensagem": "Usuário excluído com sucesso!"}
 
-
 @app.patch("/usuarios/alterar-senha")
 def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -313,7 +297,6 @@ def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logad
     conexao.close()
     return {"mensagem": "Senha alterada com sucesso!"}
 
-
 @app.get("/admin/usuarios/")
 def listar_usuarios(admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()
@@ -324,7 +307,6 @@ def listar_usuarios(admin: dict = Depends(get_current_admin_user)):
         usuarios.append({"id": linha[0], "nome": linha[1], "sexo": linha[2], "username": linha[3], "admin": bool(linha[4])})
     conexao.close()
     return usuarios
-
 
 @app.put("/admin/usuarios/{usuario_id}")
 def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depends(get_current_admin_user)):
@@ -355,7 +337,6 @@ def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depen
     registrar_auditoria("editar", "usuario", usuario_id, admin["id"], f"Campos alterados: {', '.join(campos)}")
     return {"mensagem": "Usuário updated com sucesso!"}
 
-
 @app.get("/fornecedores/")
 def listar_fornecedores(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -366,7 +347,6 @@ def listar_fornecedores(usuario: dict = Depends(get_usuario_logado)):
         fornecedores.append({"id": linha[0], "nome": linha[1], "cnpj": linha[2], "telefone": linha[3], "email": linha[4], "criado_em": linha[5]})
     conexao.close()
     return fornecedores
-
 
 @app.post("/fornecedores/")
 def criar_fornecedor(dados: FornecedorCreate, usuario: dict = Depends(get_usuario_logado)):
@@ -383,7 +363,6 @@ def criar_fornecedor(dados: FornecedorCreate, usuario: dict = Depends(get_usuari
     conexao.close()
     registrar_auditoria("criar", "fornecedor", for_id, usuario["id"], f"Fornecedor {dados.nome}")
     return {"mensagem": "Fornecedor cadastrado com sucesso!", "id": for_id}
-
 
 @app.put("/fornecedores/{fornecedor_id}")
 def atualizar_fornecedor(fornecedor_id: int, dados: FornecedorUpdate, usuario: dict = Depends(get_usuario_logado)):
@@ -415,7 +394,6 @@ def atualizar_fornecedor(fornecedor_id: int, dados: FornecedorUpdate, usuario: d
     conexao.close()
     return {"mensagem": "Fornecedor atualizado com sucesso!"}
 
-
 @app.delete("/fornecedores/{fornecedor_id}")
 def excluir_fornecedor(fornecedor_id: int, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -429,7 +407,6 @@ def excluir_fornecedor(fornecedor_id: int, usuario: dict = Depends(get_usuario_l
     conexao.close()
     registrar_auditoria("excluir", "fornecedor", fornecedor_id, usuario["id"], "")
     return {"mensagem": "Fornecedor excluído com sucesso!"}
-
 
 @app.get("/boletos/")
 def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
@@ -449,7 +426,6 @@ def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
         })
     conexao.close()
     return boletos
-
 
 @app.post("/boletos/")
 def criar_boleto(boleto: BoletoCreate, background_tasks: BackgroundTasks, usuario: dict = Depends(get_usuario_logado)):
@@ -477,7 +453,6 @@ def criar_boleto(boleto: BoletoCreate, background_tasks: BackgroundTasks, usuari
     conexao.close()
     background_tasks.add_task(registrar_auditoria, "criar", "boleto", boleto_id, usuario["id"], f"Boleto {boleto.fornecedor} R$ {boleto.valor}")
     return {"mensagem": "Boleto cadastrado com sucesso!", "id": boleto_id}
-
 
 @app.put("/boletos/{boleto_id}")
 def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(get_usuario_logado)):
@@ -522,21 +497,23 @@ def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(g
     registrar_auditoria("editar", "boleto", boleto_id, usuario["id"], f"Campos alterados: {', '.join(campos)}")
     return {"mensagem": "Boleto atualizado com sucesso!"}
 
-
 @app.patch("/boletos/{boleto_id}/pagar")
-def pagar_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
+def pagar_boleto(boleto_id: int, dados: PagarBoleto = None, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM boletos WHERE id = %s", (boleto_id,))
     if not cursor.fetchone():
         conexao.close()
         raise HTTPException(status_code=404, detail="Boleto não encontrado")
-    cursor.execute("UPDATE boletos SET status = 'Pago' WHERE id = %s", (boleto_id,))
+    if dados is not None:
+        cursor.execute("UPDATE boletos SET status = 'Pago', metodo_pagamento = %s, banco = %s WHERE id = %s",
+            (dados.metodo_pagamento, dados.banco, boleto_id))
+    else:
+        cursor.execute("UPDATE boletos SET status = 'Pago' WHERE id = %s", (boleto_id,))
     conexao.commit()
     conexao.close()
     registrar_auditoria("pagar", "boleto", boleto_id, usuario["id"], "Boleto pago")
     return {"mensagem": "Boleto marcado como pago!"}
-
 
 @app.post("/boletos/pagar-lote")
 def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuario_logado)):
@@ -545,15 +522,13 @@ def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuar
     if not dados.ids:
         raise HTTPException(status_code=400, detail="Nenhum boleto selecionado")
     placeholders = ",".join(["%s"] * len(dados.ids))
-    query = "UPDATE boletos SET status = 'Pago' WHERE id IN ({})".format(placeholders)
-    cursor.execute(query, tuple(dados.ids))
+    cursor.execute("UPDATE boletos SET status = 'Pago' WHERE id IN ({})".format(placeholders), tuple(dados.ids))
     conexao.commit()
     linhas_afetadas = cursor.rowcount
     conexao.close()
     for bid in dados.ids:
         registrar_auditoria("pagar", "boleto", bid, usuario["id"], "Pago em lote")
     return {"mensagem": f"{linhas_afetadas} boletos marcados como pagos!"}
-
 
 @app.delete("/boletos/{boleto_id}")
 def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
@@ -569,7 +544,6 @@ def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
     registrar_auditoria("excluir", "boleto", boleto_id, usuario["id"], "Boleto excluído")
     return {"mensagem": "Boleto excluído com sucesso!"}
 
-
 @app.get("/boletos/notificacoes")
 def notificacoes(usuario: dict = Depends(get_usuario_logado)):
     hoje = datetime.now().strftime("%Y-%m-%d")
@@ -583,7 +557,6 @@ def notificacoes(usuario: dict = Depends(get_usuario_logado)):
     pendentes = cursor.fetchone()[0]
     conexao.close()
     return {"vence_hoje": vence_hoje, "atrasados": atrasados, "pendentes": pendentes}
-
 
 @app.get("/boletos/exportar-csv")
 def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
@@ -606,7 +579,6 @@ def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
         headers={"Content-Disposition": f"attachment; filename=boletos_{datetime.now().strftime('%Y%m')}.csv"}
     )
 
-
 @app.get("/categorias/")
 def listar_categorias(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -615,7 +587,6 @@ def listar_categorias(usuario: dict = Depends(get_usuario_logado)):
     categorias = [linha[0] for linha in cursor.fetchall()]
     conexao.close()
     return categorias
-
 
 @app.get("/relatorio/mensal")
 def relatorio_mensal(ano: int, mes: int, usuario: dict = Depends(get_usuario_logado)):
@@ -649,7 +620,6 @@ def relatorio_mensal(ano: int, mes: int, usuario: dict = Depends(get_usuario_log
     conexao.close()
     return {"ano": ano, "mes": mes, "total_pago": total_pago, "total_pendente": total_pendente, "total_boletos": total_boletos}
 
-
 @app.get("/relatorio/fornecedores")
 def relatorio_fornecedores(ano: int, mes: int, usuario: dict = Depends(get_usuario_logado)):
     inicio = f"{ano:04d}-{mes:02d}-01"
@@ -668,7 +638,6 @@ def relatorio_fornecedores(ano: int, mes: int, usuario: dict = Depends(get_usuar
     dados = [{"fornecedor": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
     conexao.close()
     return dados
-
 
 @app.get("/relatorio/categorias")
 def relatorio_categorias(ano: int, mes: int, usuario: dict = Depends(get_usuario_logado)):
@@ -689,7 +658,6 @@ def relatorio_categorias(ano: int, mes: int, usuario: dict = Depends(get_usuario
     conexao.close()
     return dados
 
-
 @app.get("/auditoria/")
 def listar_auditoria(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -709,7 +677,6 @@ def listar_auditoria(usuario: dict = Depends(get_usuario_logado)):
     conexao.close()
     return registros
 
-
 @app.get("/boletos/bancos-utilizados")
 def bancos_utilizados(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -719,7 +686,6 @@ def bancos_utilizados(usuario: dict = Depends(get_usuario_logado)):
     conexao.close()
     return bancos
 
-
 @app.get("/boletos/categorias-utilizadas")
 def categorias_utilizadas(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
@@ -728,7 +694,6 @@ def categorias_utilizadas(usuario: dict = Depends(get_usuario_logado)):
     categorias = [linha[0] for linha in cursor.fetchall()]
     conexao.close()
     return categorias
-
 
 @app.patch("/boletos/{boleto_id}/desfazer-pagamento")
 def desfazer_pagamento(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
@@ -751,7 +716,6 @@ def desfazer_pagamento(boleto_id: int, usuario: dict = Depends(get_usuario_logad
     registrar_auditoria("desfazer_pagamento", "boleto", boleto_id, usuario["id"], "Pagamento desfeito")
     return {"mensagem": "Pagamento desfeito com sucesso! Boleto retornou para 'Pendente'."}
 
-
 @app.get("/boletos/projecao-fluxo")
 def projecao_fluxo(
     ano: int | None = None,
@@ -760,15 +724,10 @@ def projecao_fluxo(
     dia_fim: int | None = None,
     usuario: dict = Depends(get_usuario_logado)
 ):
-    """
-    Busca boletos pendentes agrupados por períodos futuros, divididos internamente por categoria.
-    Filtros opcionais: ano, mes, dia_inicio, dia_fim
-    """
     hoje = datetime.now()
     ano_alvo = ano if ano is not None else hoje.year
     mes_alvo = mes if mes is not None else hoje.month
 
-    from calendar import monthrange
     _, ultimo_dia = monthrange(ano_alvo, mes_alvo)
 
     d_inicio = dia_inicio if dia_inicio is not None else 1
@@ -833,6 +792,37 @@ def projecao_fluxo(
     conexao.close()
     return resultado
 
+@app.get("/metas/")
+def listar_metas(usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id, categoria, limite_mensal FROM metas_categorias ORDER BY categoria")
+    metas = [{"id": l[0], "categoria": l[1], "limite_mensal": float(l[2])} for l in cursor.fetchall()]
+    conexao.close()
+    return metas
+
+@app.post("/metas/")
+def salvar_meta(dados: MetaCreate, usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute(
+            """
+            INSERT INTO metas_categorias (categoria, limite_mensal)
+            VALUES (%s, %s)
+            ON CONFLICT (categoria) DO UPDATE SET limite_mensal = EXCLUDED.limite_mensal
+            RETURNING id, categoria, limite_mensal
+            """,
+            (dados.categoria.strip(), dados.limite_mensal)
+        )
+        meta = cursor.fetchone()
+        conexao.commit()
+        return {"id": meta[0], "categoria": meta[1], "limite_mensal": float(meta[2])}
+    except Exception as e:
+        conexao.rollback()
+        raise HTTPException(status_code=400, detail=f"Erro ao salvar meta: {e}")
+    finally:
+        conexao.close()
 
 @app.post("/admin/mesclar-categorias")
 def mesclar_categorias(dados: MesclarCategorias, admin: dict = Depends(get_current_admin_user)):
@@ -855,7 +845,6 @@ def mesclar_categorias(dados: MesclarCategorias, admin: dict = Depends(get_curre
     finally:
         conexao.close()
 
-
 @app.post("/admin/restaurar-backup")
 def restaurar_backup(payload: BackupPayload, admin: dict = Depends(get_current_admin_user)):
     payload_bytes = json.dumps(payload.dict()).encode("utf-8")
@@ -871,8 +860,8 @@ def restaurar_backup(payload: BackupPayload, admin: dict = Depends(get_current_a
                 boleto_dict = {k: v for k, v in boleto_dict.items() if v is not None}
                 campos = list(boleto_dict.keys())
                 valores = list(boleto_dict.values())
-                query = f"INSERT INTO boletos ({', '.join(campos)}) VALUES ({', '.join(['%s'] * len(campos))})"
-                cursor.execute(query, tuple(valores))
+                placeholders = ",".join(["%s"] * len(campos))
+                cursor.execute(f"INSERT INTO boletos ({', '.join(campos)}) VALUES ({placeholders})", tuple(valores))
         if payload.fornecedores:
             for f in payload.fornecedores:
                 forn_dict = f.dict()
@@ -880,8 +869,8 @@ def restaurar_backup(payload: BackupPayload, admin: dict = Depends(get_current_a
                 forn_dict = {k: v for k, v in forn_dict.items() if v is not None}
                 campos = list(forn_dict.keys())
                 valores = list(forn_dict.values())
-                query = f"INSERT INTO fornecedores ({', '.join(campos)}) VALUES ({', '.join(['%s'] * len(campos))})"
-                cursor.execute(query, tuple(valores))
+                placeholders = ",".join(["%s"] * len(campos))
+                cursor.execute(f"INSERT INTO fornecedores ({', '.join(campos)}) VALUES ({placeholders})", tuple(valores))
         conexao.commit()
         registrar_auditoria("restaurar_backup", "sistema", 0, admin["id"], "Backup restaurado com sucesso")
         return {"mensagem": "Backup restaurado com sucesso!"}
@@ -890,7 +879,6 @@ def restaurar_backup(payload: BackupPayload, admin: dict = Depends(get_current_a
         raise HTTPException(status_code=500, detail=f"Falha ao restaurar backup: {e}")
     finally:
         conexao.close()
-
 
 @app.get("/admin/backup-agendado")
 def backup_agendado(admin: dict = Depends(get_current_admin_user)):

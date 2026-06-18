@@ -1,13 +1,16 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { apiFetch } from './api.js';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
 import ModalNovoBoleto from './components/ModalNovoBoleto';
+import ModalAcaoBoleto from './components/ModalAcaoBoleto';
+import ModalPagamento from './components/ModalPagamento';
 import ConfirmDialog from './components/ConfirmDialog';
 import FornecedoresPage from './components/FornecedoresPage';
 import RelatoriosPage from './components/RelatoriosPage';
 import AuditoriaPage from './components/AuditoriaPage';
 import AdminPage from './components/AdminPage';
+import MetasPage from './components/MetasPage';
 
 function App() {
   const [estaLogado, setEstaLogado] = useState(false);
@@ -21,7 +24,8 @@ function App() {
   const [toast, setToast] = useState({ mensagem: '', tipo: 'sucesso', visivel: false });
   const [modalAberto, setModalAberto] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState('todos');
-  const [busca, setBusca] = useState('');
+  const [filtroDia, setFiltroDia] = useState('');
+  const [filtroFornecedor, setFiltroFornecedor] = useState('');
   const [selecionados, setSelecionados] = useState(new Set());
   const [mesSelecionado, setMesSelecionado] = useState(() => {
     const agora = new Date();
@@ -33,6 +37,8 @@ function App() {
   const [boletoEditando, setBoletoEditando] = useState(null);
   const [notificacoes, setNotificacoes] = useState(null);
   const [usuarioAdmin, setUsuarioAdmin] = useState(false);
+  const [modalAcao, setModalAcao] = useState({ aberto: false, boleto: null });
+  const [modalPagamento, setModalPagamento] = useState({ aberto: false, boleto: null });
 
   useEffect(() => {
     const root = document.documentElement;
@@ -149,24 +155,6 @@ function App() {
     localStorage.removeItem('usuarioPerfil');
   };
 
-  const lidarComPagar = async (boletoId) => {
-    const token = localStorage.getItem('token');
-    try {
-      const resposta = await apiFetch(`/boletos/${boletoId}/pagar`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resposta.ok) {
-        setBoletos((prev) =>
-          prev.map((b) => (b.id === boletoId ? { ...b, status: 'Pago' } : b))
-        );
-        mostrarToast('Boleto pago com sucesso!');
-      }
-    } catch {
-      mostrarToast('Erro ao pagar boleto', 'erro');
-    }
-  };
-
   const lidarComPagarLote = async () => {
     if (selecionados.size === 0) return;
     const token = localStorage.getItem('token');
@@ -249,17 +237,37 @@ function App() {
 
   const hoje = new Date().toISOString().split('T')[0];
 
+  const fornecedoresDisponiveis = useMemo(() => {
+    const set = new Set();
+    boletos.forEach((b) => {
+      if (b.fornecedor) set.add(b.fornecedor);
+    });
+    return Array.from(set).sort();
+  }, [boletos]);
+
+  const diasDisponiveis = useMemo(() => {
+    const set = new Set();
+    boletos.forEach((b) => {
+      if (b.vencimento && b.vencimento.startsWith(mesSelecionado)) {
+        set.add(parseInt(b.vencimento.split('-')[2], 10));
+      }
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [boletos, mesSelecionado]);
+
   const boletosFiltrados = useMemo(() => {
     let lista = boletos.filter((b) => b.vencimento.startsWith(mesSelecionado));
     if (filtroStatus === 'pendentes') lista = lista.filter((b) => b.status !== 'Pago');
     else if (filtroStatus === 'pagos') lista = lista.filter((b) => b.status === 'Pago');
     else if (filtroStatus === 'vencendo') lista = lista.filter((b) => b.vencimento === hoje && b.status !== 'Pago');
-    if (busca.trim()) {
-      const termo = busca.toLowerCase();
-      lista = lista.filter((b) => b.fornecedor.toLowerCase().includes(termo));
+    if (filtroDia) {
+      lista = lista.filter((b) => parseInt(b.vencimento.split('-')[2], 10) === parseInt(filtroDia, 10));
+    }
+    if (filtroFornecedor) {
+      lista = lista.filter((b) => b.fornecedor === filtroFornecedor);
     }
     return lista.sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
-  }, [boletos, mesSelecionado, filtroStatus, busca, hoje]);
+  }, [boletos, mesSelecionado, filtroStatus, filtroDia, filtroFornecedor, hoje]);
 
   const totalPago = useMemo(
     () => boletos.filter((b) => b.vencimento.startsWith(mesSelecionado) && b.status === 'Pago').reduce((s, b) => s + b.valor, 0),
@@ -295,6 +303,63 @@ function App() {
 
   const formatarMoeda = (valor) =>
     `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const abrirModalAcao = (boleto) => {
+    setModalAcao({ aberto: true, boleto });
+  };
+
+  const fecharModalAcao = () => {
+    setModalAcao({ aberto: false, boleto: null });
+  };
+
+  const handleEditar = (boleto) => {
+    fecharModalAcao();
+    setBoletoEditando(boleto);
+    setModalAberto(true);
+  };
+
+  const handlePagar = (boletoId) => {
+    const boleto = boletos.find((b) => b.id === boletoId);
+    if (!boleto) return;
+    fecharModalAcao();
+    setModalPagamento({ aberto: true, boleto });
+  };
+
+  const handlePagarConfirmado = (boletoId, metodoPagamento, banco) => {
+    setBoletos((prev) =>
+      prev.map((b) =>
+        b.id === boletoId ? { ...b, status: 'Pago', metodo_pagamento: metodoPagamento, banco } : b
+      )
+    );
+    setModalPagamento({ aberto: false, boleto: null });
+    mostrarToast('Boleto pago com sucesso!');
+  };
+
+  const handleDesfazerPagamento = async (boletoId) => {
+    const token = localStorage.getItem('token');
+    try {
+      const resp = await apiFetch(`/boletos/${boletoId}/desfazer-pagamento`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        setBoletos((prev) =>
+          prev.map((b) =>
+            b.id === boletoId ? { ...b, status: 'Pendente', metodo_pagamento: null, banco: null } : b
+          )
+        );
+        fecharModalAcao();
+        mostrarToast('Pagamento desfeito com sucesso!');
+      }
+    } catch {
+      mostrarToast('Erro ao desfazer pagamento', 'erro');
+    }
+  };
+
+  const handleDeletar = (boletoId) => {
+    fecharModalAcao();
+    setConfirmExcluir({ aberto: true, boletoId });
+  };
 
   const TabelaBoletos = () => (
     <>
@@ -338,7 +403,7 @@ function App() {
           ))}
         </div>
 
-        <div className="flex gap-2 flex-1 sm:justify-end items-center">
+        <div className="flex gap-2 flex-1 sm:justify-end items-center flex-wrap">
           <div className="relative">
             <select
               value={mesSelecionado}
@@ -353,15 +418,29 @@ function App() {
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">📅</span>
           </div>
 
-          <div className="relative flex-1 max-w-[200px]">
+          {diasDisponiveis.length > 0 && (
+            <div className="relative">
+              <select value={filtroDia} onChange={(e) => setFiltroDia(e.target.value)}
+                className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}>
+                <option value="">Dia</option>
+                {diasDisponiveis.map((d) => (
+                  <option key={d} value={d}>Dia {d}</option>
+                ))}
+              </select>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">📆</span>
+            </div>
+          )}
+
+          <div className="relative flex-1 min-w-[140px] max-w-[200px]">
+            <select value={filtroFornecedor} onChange={(e) => setFiltroFornecedor(e.target.value)}
+              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer">
+              <option value="">Todos fornecedores</option>
+              {fornecedoresDisponiveis.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">🔍</span>
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar fornecedor..."
-              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-atend-verde/60 transition-colors"
-            />
           </div>
         </div>
       </div>
@@ -383,32 +462,38 @@ function App() {
               <th className="px-5 py-4">Vencimento</th>
               <th className="px-5 py-4">Status</th>
               <th className="px-5 py-4">Categoria</th>
-              <th className="px-5 py-4 text-right">Ações</th>
+              <th className="px-5 py-4">Método</th>
+              <th className="px-5 py-4">Banco</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
             {carregandoBoletos ? (
-              <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-500 italic">
+              <tr><td colSpan="8" className="px-5 py-10 text-center text-slate-500 italic">
                 <div className="flex items-center justify-center gap-2">
                   <span className="inline-block w-4 h-4 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
                   Carregando...
                 </div>
               </td></tr>
             ) : boletosFiltrados.length === 0 ? (
-              <tr><td colSpan="7" className="px-5 py-12 text-center text-slate-500 bg-slate-900/10">
+              <tr><td colSpan="8" className="px-5 py-12 text-center text-slate-500 bg-slate-900/10">
                 <div className="text-2xl mb-2">📦</div>
                 <p className="text-sm font-medium text-slate-400">Nenhum boleto cadastrado</p>
                 <p className="text-xs text-slate-500 mt-0.5">Neste período ou filtro selecionado</p>
               </td></tr>
             ) : (
               boletosFiltrados.map((boleto) => (
-                <tr key={boleto.id} className={`hover:bg-slate-900/20 even:bg-slate-900/10 transition-colors ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5 even:bg-rose-500/10' : ''}`}>
-                  <td className="px-5 py-4">
+                <tr key={boleto.id}
+                  onClick={() => abrirModalAcao(boleto)}
+                  className={`cursor-pointer hover:bg-slate-900/20 even:bg-slate-900/10 transition-colors ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5 even:bg-rose-500/10' : ''}`}>
+                  <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selecionados.has(boleto.id)}
                       onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
                       className="accent-atend-verde w-4 h-4 disabled:opacity-30" />
                   </td>
-                  <td className="px-5 py-4 font-medium text-white">{boleto.fornecedor}</td>
+                  <td className="px-5 py-4 font-medium text-white">
+                    {boleto.fornecedor}
+                    {boleto.descricao && <p className="text-xs text-slate-400 font-normal mt-0.5 truncate max-w-[200px]">{boleto.descricao}</p>}
+                  </td>
                   <td className="px-5 py-4">{formatarMoeda(boleto.valor)}</td>
                   <td className="px-5 py-4 text-slate-400">
                     {new Date(boleto.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
@@ -424,17 +509,15 @@ function App() {
                       <span className="bg-slate-800/50 px-2 py-0.5 rounded text-slate-300">{boleto.categoria}</span>
                     ) : '-'}
                   </td>
-                  <td className="px-5 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button onClick={() => { setBoletoEditando(boleto); setModalAberto(true); }}
-                        className="text-xs font-semibold text-sky-400 hover:opacity-80 border border-sky-500/30 bg-sky-500/5 px-2.5 py-1 rounded transition-all" title="Editar">✏️</button>
-                      {boleto.status !== 'Pago' && (
-                        <button onClick={() => lidarComPagar(boleto.id)}
-                          className="text-xs font-semibold text-atend-verde hover:opacity-80 border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all" title="Pagar">✔</button>
-                      )}
-                      <button onClick={() => setConfirmExcluir({ aberto: true, boletoId: boleto.id })}
-                        className="text-xs font-semibold text-rose-400 hover:opacity-80 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all" title="Excluir">🗑</button>
-                    </div>
+                  <td className="px-5 py-4 text-xs text-slate-400">
+                    {boleto.metodo_pagamento ? (
+                      <span className="bg-slate-800/50 px-2 py-0.5 rounded">{boleto.metodo_pagamento}</span>
+                    ) : '-'}
+                  </td>
+                  <td className="px-5 py-4 text-xs text-slate-400">
+                    {boleto.banco ? (
+                      <span className="bg-slate-800/50 px-2 py-0.5 rounded">{boleto.banco}</span>
+                    ) : '-'}
                   </td>
                 </tr>
               ))
@@ -445,7 +528,7 @@ function App() {
               <tr className="border-t border-atend-border bg-slate-900/40 text-sm font-semibold">
                 <td colSpan="2" className="px-5 py-4 text-slate-400 uppercase tracking-wider text-xs">Total</td>
                 <td className="px-5 py-4 text-white">{formatarMoeda(totalExibido)}</td>
-                <td colSpan="4"></td>
+                <td colSpan="5"></td>
               </tr>
             </tfoot>
           )}
@@ -467,17 +550,19 @@ function App() {
           </div>
         ) : (
           boletosFiltrados.map((boleto) => (
-            <div key={boleto.id} className={`px-5 py-4 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
+            <div key={boleto.id} onClick={() => abrirModalAcao(boleto)}
+              className={`px-5 py-4 cursor-pointer active:bg-slate-800/30 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
               <div className="flex items-start gap-3">
-                <div className="pt-0.5">
+                <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" checked={selecionados.has(boleto.id)}
                     onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
                     className="accent-atend-verde w-4 h-4 disabled:opacity-30" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-white truncate">{boleto.fornecedor}</p>
+                  {boleto.descricao && <p className="text-xs text-slate-400 truncate">{boleto.descricao}</p>}
                   <p className="text-lg font-bold text-white mt-0.5">{formatarMoeda(boleto.valor)}</p>
-                  <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <span className="text-xs text-slate-400">
                       {new Date(boleto.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
                       {boleto.vencimento === hoje && boleto.status !== 'Pago' && <span className="ml-1.5 text-[10px] font-bold text-rose-400 uppercase">Hoje</span>}
@@ -488,17 +573,13 @@ function App() {
                     {boleto.categoria && (
                       <span className="text-[10px] bg-slate-800/50 px-1.5 py-0.5 rounded text-slate-400">{boleto.categoria}</span>
                     )}
+                    {boleto.metodo_pagamento && (
+                      <span className="text-[10px] bg-slate-800/50 px-1.5 py-0.5 rounded text-slate-400">{boleto.metodo_pagamento}</span>
+                    )}
+                    {boleto.banco && (
+                      <span className="text-[10px] bg-slate-800/50 px-1.5 py-0.5 rounded text-slate-400">{boleto.banco}</span>
+                    )}
                   </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <button onClick={() => { setBoletoEditando(boleto); setModalAberto(true); }}
-                    className="text-xs font-semibold text-sky-400 border border-sky-500/30 bg-sky-500/5 px-3 py-1.5 rounded transition-all">✏️</button>
-                  {boleto.status !== 'Pago' && (
-                    <button onClick={() => lidarComPagar(boleto.id)}
-                      className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-3 py-1.5 rounded transition-all">✔ Pagar</button>
-                  )}
-                  <button onClick={() => setConfirmExcluir({ aberto: true, boletoId: boleto.id })}
-                    className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-3 py-1.5 rounded transition-all">🗑</button>
                 </div>
               </div>
             </div>
@@ -602,7 +683,6 @@ function App() {
     );
   };
 
-  // TELA DE LOGIN
   if (!estaLogado) {
     return (
       <div className="min-h-screen bg-atend-bg flex items-center justify-center font-sans px-4">
@@ -637,7 +717,6 @@ function App() {
     );
   }
 
-  // PAINEL PRINCIPAL
   return (
     <div className="min-h-screen bg-atend-bg text-slate-100 font-sans flex">
       <Sidebar
@@ -690,32 +769,35 @@ function App() {
                 </div>
               </div>
 
-<div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200">
-              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent"></div>
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
-                <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-atend-verde/10 text-atend-verde border border-atend-verde/20">Mês</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <div onClick={() => setFiltroStatus('pagos')}
+                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent"></div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-atend-verde/10 text-atend-verde border border-atend-verde/20">Mês</span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-atend-verde transition-colors">{formatarMoeda(totalPago)}</span>
+                </div>
+                <div onClick={() => setFiltroStatus('pendentes')}
+                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20">Aberto</span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-amber-400 transition-colors">{formatarMoeda(totalAPagar)}</span>
+                </div>
+                <div onClick={() => setFiltroStatus('vencendo')}
+                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/20">Atenção</span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-rose-400 transition-colors">{formatarMoeda(vencendoHoje)}</span>
+                </div>
               </div>
-              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-atend-verde transition-colors">{formatarMoeda(totalPago)}</span>
-            </div>
-            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200">
-              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
-                <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20">Aberto</span>
-              </div>
-              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-amber-400 transition-colors">{formatarMoeda(totalAPagar)}</span>
-            </div>
-            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200">
-              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
-                <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/20">Atenção</span>
-              </div>
-              <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-rose-400 transition-colors">{formatarMoeda(vencendoHoje)}</span>
-            </div>
-          </div>
 
               <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
                 <TabelaBoletos />
@@ -734,6 +816,7 @@ function App() {
           {paginaAtual === 'relatorios' && <RelatoriosPage />}
           {paginaAtual === 'auditoria' && <AuditoriaPage />}
           {paginaAtual === 'admin' && usuarioAdmin && <AdminPage mostrarToast={mostrarToast} />}
+          {paginaAtual === 'metas' && <MetasPage mostrarToast={mostrarToast} />}
         </main>
       </div>
 
@@ -748,6 +831,21 @@ function App() {
 
       <Toast mensagem={toast.mensagem} tipo={toast.tipo} visivel={toast.visivel} onFechar={fecharToast} />
       <ModalNovoBoleto aberto={modalAberto} onFechar={() => { setModalAberto(false); setBoletoEditando(null); }} onBoletoCriado={fetchBoletos} boletoEditando={boletoEditando} />
+      <ModalAcaoBoleto
+        aberto={modalAcao.aberto}
+        boleto={modalAcao.boleto}
+        onFechar={fecharModalAcao}
+        onEditar={handleEditar}
+        onPagar={handlePagar}
+        onDeletar={handleDeletar}
+        onDesfazerPagamento={handleDesfazerPagamento}
+      />
+      <ModalPagamento
+        aberto={modalPagamento.aberto}
+        boleto={modalPagamento.boleto}
+        onFechar={() => setModalPagamento({ aberto: false, boleto: null })}
+        onConfirmado={handlePagarConfirmado}
+      />
       <ConfirmDialog
         aberto={confirmExcluir.aberto}
         titulo="Excluir Boleto"

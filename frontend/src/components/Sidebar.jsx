@@ -35,15 +35,25 @@ function Sidebar({ aberta, setAberta, paginaAtual, setPaginaAtual, onSair, tema,
           <ItemSidebar icone="👤" rotulo="Perfil" pagina="perfil" atual={paginaAtual} onClick={setPaginaAtual} fechar={() => setAberta(false)} />
 
           {usuarioAdmin && (
-            <ItemSidebar
-              icone="⚙️"
-              rotulo="Admin"
-              pagina="admin"
-              atual={paginaAtual}
-              onClick={setPaginaAtual}
-              fechar={() => setAberta(false)}
-              badge={notificacoes?.pendentes > 0 ? notificacoes.pendentes : null}
-            />
+            <>
+              <ItemSidebar
+                icone="⚙️"
+                rotulo="Admin"
+                pagina="admin"
+                atual={paginaAtual}
+                onClick={setPaginaAtual}
+                fechar={() => setAberta(false)}
+                badge={notificacoes?.pendentes > 0 ? notificacoes.pendentes : null}
+              />
+              <ItemSidebar
+                icone="🎯"
+                rotulo="Metas"
+                pagina="metas"
+                atual={paginaAtual}
+                onClick={setPaginaAtual}
+                fechar={() => setAberta(false)}
+              />
+            </>
           )}
         </nav>
 

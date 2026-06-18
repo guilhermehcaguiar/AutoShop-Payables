@@ -7,11 +7,20 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [vencimento, setVencimento] = useState('');
   const [codigoBarras, setCodigoBarras] = useState('');
   const [categoria, setCategoria] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [metodoPagamento, setMetodoPagamento] = useState('');
+  const [banco, setBanco] = useState('');
   const [categorias, setCategorias] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
+  const [bancos, setBancos] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
+  const [mostrarDropdownFornecedor, setMostrarDropdownFornecedor] = useState(false);
   const editando = !!boletoEditando;
+
+  const fornecedoresFiltrados = fornecedores.filter((f) =>
+    f.nome.toLowerCase().includes(fornecedor.toLowerCase())
+  );
 
   useEffect(() => {
     if (!aberto) return;
@@ -21,17 +30,23 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       setVencimento(boletoEditando.vencimento);
       setCodigoBarras(boletoEditando.codigo_barras || '');
       setCategoria(boletoEditando.categoria || '');
+      setDescricao(boletoEditando.descricao || '');
+      setMetodoPagamento(boletoEditando.metodo_pagamento || '');
+      setBanco(boletoEditando.banco || '');
     } else {
       setFornecedor(''); setValor(''); setVencimento('');
       setCodigoBarras(''); setCategoria('');
+      setDescricao(''); setMetodoPagamento(''); setBanco('');
     }
     setErro('');
     const token = localStorage.getItem('token');
     const headers = { 'Authorization': `Bearer ${token}` };
-    apiFetch('/categorias/', { headers })
+    apiFetch('/boletos/categorias-utilizadas', { headers })
       .then((r) => r.ok && r.json()).then(setCategorias).catch(() => {});
     apiFetch('/fornecedores/', { headers })
       .then((r) => r.ok && r.json()).then(setFornecedores).catch(() => {});
+    apiFetch('/boletos/bancos-utilizados', { headers })
+      .then((r) => r.ok && r.json()).then(setBancos).catch(() => {});
   }, [aberto, boletoEditando]);
 
   const autoSalvarFornecedor = async (token) => {
@@ -64,6 +79,9 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
           vencimento,
           codigo_barras: codigoBarras || null,
           categoria: categoria || null,
+          descricao: descricao || null,
+          metodo_pagamento: metodoPagamento || null,
+          banco: banco || null,
         }),
       });
       const dados = await resposta.json();
@@ -93,16 +111,24 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
           <button onClick={onFechar} className="text-slate-500 hover:text-white text-xl leading-none">&times;</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+          <div className="relative">
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Fornecedor</label>
-            <input type="text" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)}
+            <input type="text" value={fornecedor} onChange={(e) => { setFornecedor(e.target.value); setMostrarDropdownFornecedor(true); }}
+              onFocus={() => setMostrarDropdownFornecedor(true)}
+              onBlur={() => setTimeout(() => setMostrarDropdownFornecedor(false), 200)}
               placeholder="Ex: Auto Peças Silva"
-              list="lista-fornecedores"
               className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
               required />
-            <datalist id="lista-fornecedores">
-              {fornecedores.map((f) => (<option key={f.id} value={f.nome} />))}
-            </datalist>
+            {mostrarDropdownFornecedor && fornecedoresFiltrados.length > 0 && (
+              <div className="absolute z-20 w-full bg-atend-card border border-atend-border rounded-lg mt-1 max-h-40 overflow-y-auto shadow-xl">
+                {fornecedoresFiltrados.map((f) => (
+                  <button key={f.id} type="button" onMouseDown={() => { setFornecedor(f.nome); setMostrarDropdownFornecedor(false); }}
+                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-atend-verde/20 transition-colors">
+                    {f.nome}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Valor (R$)</label>
@@ -114,28 +140,58 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Vencimento</label>
             <input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors "
+              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors"
+              required />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Categoria</label>
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
+              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors"
+              required>
+              <option value="" className="text-slate-600">Selecione...</option>
+              {categorias.map((cat, i) => (<option key={i} value={cat}>{cat}</option>))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Código de Barras</label>
+            <input type="text" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value.replace(/\D/g, ''))}
+              placeholder="Código do boleto"
+              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
               required />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Categoria <span className="text-slate-600 normal-case">(opcional)</span>
+              Descrição <span className="text-slate-600 normal-case">(opcional)</span>
             </label>
-            <input type="text" value={categoria} onChange={(e) => setCategoria(e.target.value)}
-              placeholder="Ex: Aluguel, Água, Peças"
-              list="lista-categorias"
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" />
-            <datalist id="lista-categorias">
-              {categorias.map((cat, i) => (<option key={i} value={cat} />))}
-            </datalist>
+            <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Descrição do boleto"
+              rows="2"
+              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors resize-none" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Código de Barras <span className="text-slate-600 normal-case">(opcional)</span>
+              Método Pagamento <span className="text-slate-600 normal-case">(opcional)</span>
             </label>
-            <input type="text" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)}
-              placeholder="Código do boleto"
+            <select value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value)}
+              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors">
+              <option value=""></option>
+              <option value="Pix">Pix</option>
+              <option value="Transferência">Transferência</option>
+              <option value="Cartão">Cartão</option>
+              <option value="Dinheiro">Dinheiro</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              Banco <span className="text-slate-600 normal-case">(opcional)</span>
+            </label>
+            <input type="text" value={banco} onChange={(e) => setBanco(e.target.value)}
+              placeholder="Ex: Itaú, Bradesco, Santander"
+              list="lista-bancos"
               className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" />
+            <datalist id="lista-bancos">
+              {bancos.map((b, i) => (<option key={i} value={b} />))}
+            </datalist>
           </div>
           {erro && (
             <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erro}</div>
