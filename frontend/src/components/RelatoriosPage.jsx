@@ -148,11 +148,11 @@ function RelatoriosPage({ mostrarToast }) {
 
         pageBg();
 
-        y = 15;
-        card(ml, cw, 85, y);
+        y = 24;
+        card(ml, cw, 105, y);
 
         const centerX = pw / 2;
-        const titleY = y + 16;
+        const titleY = y + 18;
         const sonicSize = 22;
 
         const fullTitle = 'ATEND-CAR';
@@ -184,7 +184,7 @@ function RelatoriosPage({ mostrarToast }) {
         ctx.fillStyle = '#ffffff';
         ctx.fillText(fullTitle, cx, cy);
         const imgData = canvas.toDataURL('image/png');
-        const pdfImgH = 16;
+        const pdfImgH = 18;
         const pdfImgW = (canvas.width / canvas.height) * pdfImgH;
         const titleX = centerX - pdfImgW / 2;
         doc.addImage(imgData, 'PNG', titleX, titleY - pdfImgH / 2, pdfImgW, pdfImgH);
@@ -192,18 +192,18 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(148, 163, 184);
-        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 10, { align: 'center' });
+        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 8, { align: 'center' });
 
         doc.setDrawColor(46, 204, 113);
         doc.setLineWidth(0.5);
-        doc.line(ml + 10, titleY + 15, ml + cw - 10, titleY + 15);
+        doc.line(ml + 10, titleY + 14, ml + cw - 10, titleY + 14);
 
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(13);
+        doc.setFontSize(14);
         doc.setTextColor(46, 204, 113);
-        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 24, { align: 'center' });
+        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 26, { align: 'center' });
 
-        y = titleY + 29;
+        y = titleY + 36;
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
@@ -211,27 +211,28 @@ function RelatoriosPage({ mostrarToast }) {
         const dataEmissao = new Date().toLocaleDateString('pt-BR');
         doc.text(`Emissão: ${dataEmissao}`, ml, y);
         doc.text(`Período: ${nomeMes} ${ano}`, ml + cw, y, { align: 'right' });
-        y += 4;
+        y += 8;
 
         sectionTitle('Demonstrativo do Resultado', y);
         y += 16;
 
-        const headerRowH = 7;
-        const dataRowH = 7;
+        const headerRowH = 8;
+        const dataRowH = 8;
 
-        card(ml, cw, 60, y);
-        const ty = y + 3;
+        const dreContentH = headerRowH + 3 * dataRowH + 2 + dataRowH + 6;
+        card(ml, cw, dreContentH, y);
+        const ty = y + 4;
 
         const headerLabels = ['Descrição', 'Valor'];
         const headerWs = [cw * 0.7, cw * 0.3];
         doc.setFillColor(46, 204, 113);
         doc.rect(ml + 4, ty, cw - 8, headerRowH, 'F');
         doc.setTextColor(10, 10, 10);
-        doc.setFontSize(8);
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         let hx = ml + 6;
         headerLabels.forEach((l, i) => {
-          doc.text(l, hx + (i === 1 ? headerWs[i] - 2 : 0), ty + 4.5, i === 1 ? { align: 'right' } : undefined);
+          doc.text(l, hx + (i === 1 ? headerWs[i] - 2 : 0), ty + 5, i === 1 ? { align: 'right' } : undefined);
           if (i === 0) hx += headerWs[i];
         });
 
@@ -247,26 +248,26 @@ function RelatoriosPage({ mostrarToast }) {
           doc.setTextColor(isBold ? 255 : 200, isBold ? 255 : 200, isBold ? 180 : 180);
           doc.setFontSize(8);
           doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-          doc.text(label, ml + 6, ry + 5);
-          doc.text(value, ml + cw - 6, ry + 5, { align: 'right' });
+          doc.text(label, ml + 6, ry + 5.5);
+          doc.text(value, ml + cw - 6, ry + 5.5, { align: 'right' });
           ry += dataRowH;
         });
 
         doc.setDrawColor(46, 204, 113);
         doc.setLineWidth(0.3);
         doc.line(ml + 4, ry, ml + cw - 4, ry);
-        ry += 2;
+        ry += 3;
 
         doc.setFillColor(26, 29, 39);
         doc.rect(ml + 4, ry, cw - 8, dataRowH, 'F');
         doc.setTextColor(46, 204, 113);
-        doc.setFontSize(8);
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.text('Boletos no Mês', ml + 6, ry + 5);
-        doc.text(String(m.total_boletos || 0), ml + cw - 6, ry + 5, { align: 'right' });
+        doc.text('Boletos no Mês', ml + 6, ry + 5.5);
+        doc.text(String(m.total_boletos || 0), ml + cw - 6, ry + 5.5, { align: 'right' });
         ry += dataRowH + 2;
 
-        y = ry + 3;
+        y = ry + 8;
 
         if (Array.isArray(cats) && cats.length > 0) {
           sectionTitle('Distribuição por Categoria', y);
@@ -276,18 +277,18 @@ function RelatoriosPage({ mostrarToast }) {
           const catH = catRows * dataRowH + 14;
           card(ml, cw, catH, y);
 
-          const ct = y + 3;
+          const ct = y + 4;
           doc.setFillColor(46, 204, 113);
           doc.rect(ml + 4, ct, cw - 8, headerRowH, 'F');
           doc.setTextColor(10, 10, 10);
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
           const catHeaders = ['Categoria', 'Valor', 'Qtd'];
           const catWs = [cw * 0.55, cw * 0.3, cw * 0.15];
           let chx = ml + 6;
           catHeaders.forEach((l, i) => {
             const isLast = i === catHeaders.length - 1;
-            doc.text(l, isLast ? chx + catWs[i] - 2 : chx, ct + 4.5, isLast ? { align: 'right' } : undefined);
+            doc.text(l, isLast ? chx + catWs[i] - 2 : chx, ct + 5, isLast ? { align: 'right' } : undefined);
             chx += catWs[i];
           });
 
@@ -302,22 +303,22 @@ function RelatoriosPage({ mostrarToast }) {
             const vals = [c.categoria, fmt(c.total), String(c.quantidade)];
             vals.forEach((val, j) => {
               const isLast = j === vals.length - 1;
-              doc.text(val, isLast ? cx2 + catWs[j] - 2 : cx2, cry + 5, isLast ? { align: 'right' } : undefined);
+              doc.text(val, isLast ? cx2 + catWs[j] - 2 : cx2, cry + 5.5, isLast ? { align: 'right' } : undefined);
               cx2 += catWs[j];
             });
             cry += dataRowH;
           });
-          y = cry + 8;
+          y = cry + 12;
         }
 
-        y += 8;
+        y = Math.max(y, ph - 18);
         doc.setDrawColor(42, 45, 58);
         doc.setLineWidth(0.3);
         doc.line(ml, y, ml + cw, y);
-        y += 4;
+        y += 5;
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
+        doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
         doc.text('AutoShop Payables © 2026 — Todos os direitos reservados.', centerX, y, { align: 'center' });
 
