@@ -842,7 +842,7 @@ function App() {
 
           {paginaAtual === 'perfil' && <PaginaPerfil />}
           {paginaAtual === 'fornecedores' && <FornecedoresPage mostrarToast={mostrarToast} />}
-          {paginaAtual === 'relatorios' && <RelatoriosPage />}
+          {paginaAtual === 'relatorios' && <RelatoriosPage mostrarToast={mostrarToast} />}
           {paginaAtual === 'auditoria' && <AuditoriaPage />}
           {paginaAtual === 'admin' && usuarioAdmin && <AdminPage mostrarToast={mostrarToast} />}
           {paginaAtual === 'metas' && <MetasPage mostrarToast={mostrarToast} />}
