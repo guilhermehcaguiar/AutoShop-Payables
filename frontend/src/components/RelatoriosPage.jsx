@@ -192,18 +192,18 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(148, 163, 184);
-        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 8, { align: 'center' });
+        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 13, { align: 'center' });
 
         doc.setDrawColor(46, 204, 113);
         doc.setLineWidth(0.5);
-        doc.line(ml + 10, titleY + 14, ml + cw - 10, titleY + 14);
+        doc.line(ml + 10, titleY + 20, ml + cw - 10, titleY + 20);
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(14);
         doc.setTextColor(46, 204, 113);
-        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 26, { align: 'center' });
+        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 33, { align: 'center' });
 
-        y = titleY + 36;
+        y = titleY + 44;
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
