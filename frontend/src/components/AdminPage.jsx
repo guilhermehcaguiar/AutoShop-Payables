@@ -210,6 +210,8 @@ function AdminPage({ mostrarToast }) {
   useEffect(() => { if (moduloAberto === 4) fetchStatusBackup(); }, [moduloAberto]);
 
   const toggleBackup = async () => {
+    const novoEstado = !backupAtivo;
+    setBackupAtivo(novoEstado);
     try {
       const resp = await apiFetch('/admin/backup-toggle', {
         method: 'POST',
@@ -220,10 +222,14 @@ function AdminPage({ mostrarToast }) {
         setBackupAtivo(data.ativo);
         mostrarToast(`Backup automático ${data.ativo ? 'ativado' : 'desativado'}!`);
       } else {
+        setBackupAtivo(!novoEstado);
         const d = await resp.json();
         mostrarToast(d.detail || 'Erro', 'erro');
       }
-    } catch { mostrarToast('Erro ao alterar backup', 'erro'); }
+    } catch {
+      setBackupAtivo(!novoEstado);
+      mostrarToast('Erro ao alterar backup', 'erro');
+    }
   };
 
   const executarBackup = async () => {

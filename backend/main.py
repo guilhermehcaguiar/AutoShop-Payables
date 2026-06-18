@@ -27,6 +27,9 @@ load_dotenv()
 migrar()
 
 def backup_job():
+    if not BACKUP_SCHEDULED:
+        print("[BACKUP] BACKUP_SCHEDULED=false, pulando backup agendado.")
+        return
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -73,6 +76,7 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 EMAIL_TO_BACKUP = os.getenv("EMAIL_TO_BACKUP", "")
+BACKUP_SCHEDULED = os.getenv("BACKUP_SCHEDULED", "false").lower() == "true"
 
 class UsuarioCreate(BaseModel):
     nome: str
@@ -1041,6 +1045,8 @@ Robô de Backups Atend-Car"""
 
 @app.get("/admin/backup-agendado")
 def backup_agendado(admin: dict = Depends(get_current_admin_user)):
+    if not BACKUP_SCHEDULED:
+        return {"mensagem": "Backup desativado pelo administrador do sistema."}
     try:
         conexao = get_connection()
         cursor = conexao.cursor()
