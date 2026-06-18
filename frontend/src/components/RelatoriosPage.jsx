@@ -157,7 +157,7 @@ function RelatoriosPage({ mostrarToast }) {
           doc.rect(ml, y, cw, h, 'F');
           doc.setTextColor(isBold ? 255 : 200, isBold ? 255 : 200, isBold ? 255 : 180);
           doc.setFontSize(8);
-          doc.setFont('helvetica', isBold ? 'bold' : 'normal', 'normal');
+          doc.setFont('helvetica', isBold ? 'bold' : 'normal');
           doc.text(label, ml + 2, y + 5);
           doc.text(value, ml + cw - 2, y + 5, { align: 'right' });
           y += h;
@@ -180,7 +180,7 @@ function RelatoriosPage({ mostrarToast }) {
           doc.rect(ml, y, cw, 7, 'F');
           doc.setTextColor(10, 10, 10);
           doc.setFontSize(8);
-          doc.setFont('helvetica', 'bold', 'normal');
+          doc.setFont('helvetica', 'bold');
           let xCat = ml;
           catCols.forEach(({ label, w }) => {
             doc.text(label, xCat + 2, y + 5);
@@ -194,7 +194,7 @@ function RelatoriosPage({ mostrarToast }) {
             doc.rect(ml, y, cw, 7, 'F');
             doc.setTextColor(200, 200, 180);
             doc.setFontSize(8);
-            doc.setFont('helvetica', 'normal', 'normal');
+            doc.setFont('helvetica', 'normal');
             let xCat2 = ml;
             vals.forEach((val, j) => {
               const isLast = j === vals.length - 1;
