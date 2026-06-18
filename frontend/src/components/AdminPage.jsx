@@ -234,8 +234,11 @@ function AdminPage({ mostrarToast }) {
 
   const executarBackup = async () => {
     setExecutandoBackup(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
     try {
-      const resp = await apiFetch('/admin/backup-agendado', { headers });
+      const resp = await apiFetch('/admin/backup-agendado', { headers, signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await resp.json();
       if (resp.ok) {
         if (data.email_enviado !== undefined) {
@@ -246,7 +249,10 @@ function AdminPage({ mostrarToast }) {
       } else {
         mostrarToast(data.detail || 'Erro ao executar backup', 'erro');
       }
-    } catch { mostrarToast('Erro de conexão', 'erro'); }
+    } catch {
+      clearTimeout(timeoutId);
+      mostrarToast('Erro de conexão ou tempo limite excedido', 'erro');
+    }
     setExecutandoBackup(false);
   };
 

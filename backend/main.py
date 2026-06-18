@@ -174,6 +174,18 @@ class MetaCreate(BaseModel):
     categoria: str
     limite_mensal: float
 
+class ModeloRecorrenteCreate(BaseModel):
+    fornecedor: str
+    valor: float
+    vencimento_dia: int
+    categoria: str
+    descricao: str | None = None
+    metodo_pagamento: str | None = None
+    banco: str | None = None
+
+class CriarLoteInput(BaseModel):
+    boletos: list[BoletoCreate]
+
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 ALGORITHM = "HS256"
 
@@ -1030,7 +1042,7 @@ Robô de Backups Atend-Car"""
         )
         msg.attach(part)
 
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
         server.starttls()
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.sendmail(EMAIL_FROM, EMAIL_TO_BACKUP, msg.as_string())
@@ -1107,3 +1119,197 @@ def arquivar_boletos(admin: dict = Depends(get_current_admin_user)):
     conexao.close()
     registrar_auditoria("arquivar", "sistema", 0, admin["id"], f"{arquivados} boletos arquivados automaticamente")
     return {"mensagem": f"{arquivados} boletos arquivados com sucesso!", "arquivados": arquivados}
+
+@app.get("/boletos/arquivados")
+def listar_arquivados(usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id, boleto_original_id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, arquivado_em FROM boletos_arquivados ORDER BY arquivado_em DESC")
+    boletos = []
+    for linha in cursor.fetchall():
+        boletos.append({
+            "id": linha[0], "boleto_original_id": linha[1], "fornecedor": linha[2],
+            "valor": linha[3], "vencimento": linha[4], "codigo_barras": linha[5],
+            "status": linha[6], "categoria": linha[7], "usuario_id": linha[8],
+            "descricao": linha[9], "metodo_pagamento": linha[10], "banco": linha[11],
+            "data_pagamento": linha[12], "pago_por": linha[13], "criado_em": linha[14],
+            "arquivado_em": linha[15]
+        })
+    conexao.close()
+    return boletos
+
+@app.post("/admin/desarquivar/{arquivado_id}")
+def desarquivar_boleto(arquivado_id: int, admin: dict = Depends(get_current_admin_user)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT * FROM boletos_arquivados WHERE id = %s", (arquivado_id,))
+    linha = cursor.fetchone()
+    if not linha:
+        conexao.close()
+        raise HTTPException(status_code=404, detail="Boleto arquivado não encontrado")
+    colunas = [desc[0] for desc in cursor.description]
+    dados = dict(zip(colunas, linha))
+    cursor.execute("""
+        INSERT INTO boletos (fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        dados["fornecedor"], dados["valor"], dados["vencimento"], dados["codigo_barras"],
+        dados["status"], dados["categoria"], dados["usuario_id"], dados["descricao"],
+        dados["metodo_pagamento"], dados["banco"], dados["data_pagamento"], dados["pago_por"],
+        dados["criado_em"]
+    ))
+    cursor.execute("DELETE FROM boletos_arquivados WHERE id = %s", (arquivado_id,))
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("desarquivar", "boleto", arquivado_id, admin["id"], "Boleto restaurado do arquivo")
+    return {"mensagem": "Boleto restaurado do arquivo com sucesso!"}
+
+@app.get("/boletos/excluidos")
+def listar_excluidos(admin: dict = Depends(get_current_admin_user)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, deletado_em FROM boletos WHERE deletado_em IS NOT NULL ORDER BY deletado_em DESC")
+    boletos = []
+    for linha in cursor.fetchall():
+        boletos.append({
+            "id": linha[0], "fornecedor": linha[1], "valor": linha[2],
+            "vencimento": linha[3], "codigo_barras": linha[4], "status": linha[5],
+            "categoria": linha[6], "usuario_id": linha[7], "descricao": linha[8],
+            "metodo_pagamento": linha[9], "banco": linha[10], "data_pagamento": linha[11],
+            "pago_por": linha[12], "criado_em": linha[13], "deletado_em": linha[14]
+        })
+    conexao.close()
+    return boletos
+
+@app.post("/admin/boletos/zerar")
+def zerar_mes(admin: dict = Depends(get_current_admin_user)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    hoje = datetime.now()
+    inicio_mes = f"{hoje.year:04d}-{hoje.month:02d}-01"
+    if hoje.month == 12:
+        fim_mes = f"{hoje.year + 1:04d}-01-01"
+    else:
+        fim_mes = f"{hoje.year:04d}-{hoje.month + 1:02d}-01"
+
+    cursor.execute("""
+        INSERT INTO boletos_arquivados (boleto_original_id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, arquivado_em)
+        SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, NOW()
+        FROM boletos WHERE deletado_em IS NULL AND vencimento >= %s AND vencimento < %s AND status = 'Pago'
+    """, (inicio_mes, fim_mes))
+    arquivados = cursor.rowcount
+    cursor.execute("DELETE FROM boletos WHERE deletado_em IS NULL AND vencimento >= %s AND vencimento < %s AND status = 'Pago'", (inicio_mes, fim_mes))
+
+    cursor.execute("""
+        INSERT INTO boletos_arquivados (boleto_original_id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, arquivado_em)
+        SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, NOW()
+        FROM boletos WHERE deletado_em IS NULL AND vencimento >= %s AND vencimento < %s AND status != 'Pago'
+    """, (inicio_mes, fim_mes))
+    pendentes = cursor.rowcount
+    cursor.execute("DELETE FROM boletos WHERE deletado_em IS NULL AND vencimento >= %s AND vencimento < %s AND status != 'Pago'", (inicio_mes, fim_mes))
+
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("zerar_mes", "sistema", 0, admin["id"], f"Mês zerado: {arquivados} pagos arquivados, {pendentes} pendentes removidos")
+    return {"mensagem": f"Mês zerado: {arquivados} pagos arquivados, {pendentes} pendentes removidos", "arquivados": arquivados, "removidos": pendentes}
+
+@app.get("/boletos/recorrentes")
+def listar_recorrentes(usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id, fornecedor, valor, vencimento_dia, categoria, descricao, metodo_pagamento, banco, ativo, criado_em, criado_por FROM modelos_recorrentes ORDER BY fornecedor")
+    modelos = []
+    for linha in cursor.fetchall():
+        modelos.append({
+            "id": linha[0], "fornecedor": linha[1], "valor": linha[2],
+            "vencimento_dia": linha[3], "categoria": linha[4], "descricao": linha[5],
+            "metodo_pagamento": linha[6], "banco": linha[7], "ativo": linha[8],
+            "criado_em": linha[9], "criado_por": linha[10]
+        })
+    conexao.close()
+    return modelos
+
+@app.post("/boletos/recorrentes")
+def criar_recorrente(dados: ModeloRecorrenteCreate, usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("""
+        INSERT INTO modelos_recorrentes (fornecedor, valor, vencimento_dia, categoria, descricao, metodo_pagamento, banco, criado_por)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+    """, (dados.fornecedor, dados.valor, dados.vencimento_dia, dados.categoria, dados.descricao, dados.metodo_pagamento, dados.banco, usuario["id"]))
+    modelo_id = cursor.fetchone()[0]
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("criar_recorrente", "modelo_recorrente", modelo_id, usuario["id"], f"Modelo {dados.fornecedor} R$ {dados.valor}")
+    return {"mensagem": "Modelo recorrente criado com sucesso!", "id": modelo_id}
+
+@app.post("/boletos/recorrentes/{modelo_id}/gerar")
+def gerar_boletos_recorrentes(modelo_id: int, usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT * FROM modelos_recorrentes WHERE id = %s AND ativo = TRUE", (modelo_id,))
+    linha = cursor.fetchone()
+    if not linha:
+        conexao.close()
+        raise HTTPException(status_code=404, detail="Modelo recorrente não encontrado ou inativo")
+    colunas = [desc[0] for desc in cursor.description]
+    modelo = dict(zip(colunas, linha))
+
+    hoje = datetime.now()
+    ano = hoje.year
+    mes = hoje.month
+    dia = modelo["vencimento_dia"]
+    ultimo_dia = monthrange(ano, mes)[1]
+    dia_real = min(dia, ultimo_dia)
+    vencimento = f"{ano:04d}-{mes:02d}-{dia_real:02d}"
+
+    cursor.execute("SELECT id FROM boletos WHERE fornecedor = %s AND vencimento = %s AND deletado_em IS NULL", (modelo["fornecedor"], vencimento))
+    if cursor.fetchone():
+        conexao.close()
+        raise HTTPException(status_code=400, detail="Já existe um boleto deste fornecedor com este vencimento")
+
+    cursor.execute("""
+        INSERT INTO boletos (fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco)
+        VALUES (%s, %s, %s, '', 'Pendente', %s, %s, %s, %s, %s)
+        RETURNING id
+    """, (modelo["fornecedor"], modelo["valor"], vencimento, modelo["categoria"], usuario["id"], modelo["descricao"], modelo["metodo_pagamento"], modelo["banco"]))
+    boleto_id = cursor.fetchone()[0]
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("gerar_recorrente", "boleto", boleto_id, usuario["id"], f"Boleto gerado do modelo {modelo_id}")
+    return {"mensagem": "Boleto gerado com sucesso!", "id": boleto_id, "vencimento": vencimento}
+
+@app.delete("/boletos/recorrentes/{modelo_id}")
+def deletar_recorrente(modelo_id: int, usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id FROM modelos_recorrentes WHERE id = %s", (modelo_id,))
+    if not cursor.fetchone():
+        conexao.close()
+        raise HTTPException(status_code=404, detail="Modelo recorrente não encontrado")
+    cursor.execute("DELETE FROM modelos_recorrentes WHERE id = %s", (modelo_id,))
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("deletar_recorrente", "modelo_recorrente", modelo_id, usuario["id"], "Modelo recorrente deletado")
+    return {"mensagem": "Modelo recorrente deletado com sucesso!"}
+
+@app.post("/admin/boletos/criar-lote")
+def criar_boletos_lote(dados: CriarLoteInput, admin: dict = Depends(get_current_admin_user)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    criados = 0
+    erros = []
+    for i, b in enumerate(dados.boletos):
+        try:
+            cursor.execute("""
+                INSERT INTO boletos (fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco)
+                VALUES (%s, %s, %s, %s, 'Pendente', %s, %s, %s, %s, %s)
+            """, (b.fornecedor, b.valor, b.vencimento, b.codigo_barras, b.categoria, admin["id"], b.descricao, b.metodo_pagamento, b.banco))
+            criados += 1
+        except Exception as e:
+            erros.append({"indice": i, "fornecedor": b.fornecedor, "erro": str(e)})
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("criar_lote", "boleto", 0, admin["id"], f"{criados} boletos criados em lote")
+    return {"mensagem": f"{criados} boletos criados com sucesso!", "criados": criados, "erros": erros}
