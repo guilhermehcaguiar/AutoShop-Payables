@@ -135,7 +135,9 @@ class Config(Base):
 
 
 def get_connection():
-    return psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = False
+    return conn
 
 
 def _executar_script(cursor, query, params=None):
@@ -195,8 +197,10 @@ def migrar():
         """
     )
 
-    cursor.execute("SELECT COUNT(*) FROM config WHERE chave = 'backup_auto'")
-    if cursor.fetchone()[0] == 0:
+    cursor.execute(
+        "SELECT valor FROM config WHERE chave = 'backup_auto'"
+    )
+    if cursor.fetchone() is None:
         valor_inicial = "true" if os.getenv("BACKUP_SCHEDULED", "false").lower() == "true" else "false"
         cursor.execute("INSERT INTO config (chave, valor) VALUES ('backup_auto', %s)", (valor_inicial,))
 

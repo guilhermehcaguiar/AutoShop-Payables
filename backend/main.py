@@ -14,6 +14,7 @@ import json
 import zipfile
 import tempfile
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -173,6 +174,10 @@ class MesclarCategorias(BaseModel):
 class MetaCreate(BaseModel):
     categoria: str
     limite_mensal: float
+
+BR_TZ = ZoneInfo('America/Sao_Paulo')
+def agora_br():
+    return datetime.now(BR_TZ)
 
 class ModeloRecorrenteCreate(BaseModel):
     fornecedor: str
@@ -594,7 +599,7 @@ def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
 
 @app.get("/boletos/notificacoes")
 def notificacoes(usuario: dict = Depends(get_usuario_logado)):
-    hoje = datetime.now().strftime("%Y-%m-%d")
+    hoje = agora_br().strftime("%Y-%m-%d")
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT COUNT(*) FROM boletos WHERE vencimento = %s AND status != 'Pago' AND deletado_em IS NULL", (hoje,))
@@ -624,7 +629,7 @@ def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=boletos_{datetime.now().strftime('%Y%m')}.csv"}
+        headers={"Content-Disposition": f"attachment; filename=boletos_{agora_br().strftime('%Y%m')}.csv"}
     )
 
 @app.get("/categorias/")
@@ -786,7 +791,7 @@ def projecao_fluxo(
     dia_fim: int | None = None,
     usuario: dict = Depends(get_usuario_logado)
 ):
-    hoje = datetime.now()
+    hoje = agora_br()
     ano_alvo = ano if ano is not None else hoje.year
     mes_alvo = mes if mes is not None else hoje.month
 
@@ -976,7 +981,7 @@ def backup_toggle(admin: dict = Depends(get_current_admin_user)):
         raise HTTPException(status_code=500, detail=f"Erro ao alternar backup: {e}")
 
 def executar_backup_agendado(admin_id: int = 0):
-    agora = datetime.now()
+    agora = agora_br()
     data_str = agora.strftime("%Y-%m-%d_%H-%M-%S")
     nome_arquivo = f"backup_atendcar_{data_str}.zip"
 
@@ -1102,7 +1107,7 @@ def recuperar_boleto(boleto_id: int, admin: dict = Depends(get_current_admin_use
 def arquivar_boletos(admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    dois_meses_atras_dt = (datetime.now() - timedelta(days=60))
+    dois_meses_atras_dt = (agora_br() - timedelta(days=60))
 
     cursor.execute("""
         INSERT INTO boletos_arquivados (boleto_original_id, fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco, data_pagamento, pago_por, criado_em, arquivado_em)
@@ -1185,7 +1190,7 @@ def listar_excluidos(admin: dict = Depends(get_current_admin_user)):
 def zerar_mes(admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    hoje = datetime.now()
+    hoje = agora_br()
     inicio_mes = f"{hoje.year:04d}-{hoje.month:02d}-01"
     if hoje.month == 12:
         fim_mes = f"{hoje.year + 1:04d}-01-01"
@@ -1256,7 +1261,7 @@ def gerar_boletos_recorrentes(modelo_id: int, usuario: dict = Depends(get_usuari
     colunas = [desc[0] for desc in cursor.description]
     modelo = dict(zip(colunas, linha))
 
-    hoje = datetime.now()
+    hoje = agora_br()
     ano = hoje.year
     mes = hoje.month
     dia = modelo["vencimento_dia"]
@@ -1318,7 +1323,7 @@ def criar_boletos_lote(dados: CriarLoteInput, admin: dict = Depends(get_current_
 def evolucao_mensal(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    hoje = datetime.now()
+    hoje = agora_br()
     meses = []
     for i in range(11, -1, -1):
         m = hoje.month - i

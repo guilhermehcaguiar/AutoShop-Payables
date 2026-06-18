@@ -62,7 +62,7 @@ function ModalAcaoBoleto({ aberto, boleto, onFechar, onEditar, onPagar, onDeleta
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Pago em</label>
                   <p className="text-sm text-white">
-                    {new Date(boleto.data_pagamento + (boleto.data_pagamento.includes('T') ? '' : 'T12:00:00')).toLocaleString('pt-BR')}
+                    {new Date(boleto.data_pagamento + (boleto.data_pagamento.includes('T') ? 'Z' : 'T12:00:00Z')).toLocaleString('pt-BR')}
                     {boleto.pago_por && (
                       <span className="text-slate-400 ml-2">
                         por {usuarios[boleto.pago_por] || `Usuário #${boleto.pago_por}`}
