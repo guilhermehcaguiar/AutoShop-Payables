@@ -101,9 +101,12 @@ function RelatoriosPage({ mostrarToast }) {
   const exportarPDF = async () => {
     setExportando(true);
     try {
+      const pdfParams = new URLSearchParams({ ano, mes });
+      if (diaInicio) pdfParams.set('dia_inicio', diaInicio);
+      if (diaFim) pdfParams.set('dia_fim', diaFim);
       const [respM, respC] = await Promise.all([
-        apiFetch(`/relatorio/mensal?ano=${ano}&mes=${mes}`),
-        apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}`),
+        apiFetch(`/relatorio/mensal?${pdfParams}`),
+        apiFetch(`/relatorio/categorias?${pdfParams}`),
       ]);
       if (!respM.ok) { mostrarToast?.('Erro ao carregar dados', 'erro'); setExportando(false); return; }
 
@@ -209,8 +212,11 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
         const dataEmissao = new Date().toLocaleDateString('pt-BR');
+        const periodoLabel = diaInicio && diaFim
+          ? `${diaInicio}/${diaFim} ${nomeMes} ${ano}`
+          : `${nomeMes} ${ano}`;
         doc.text(`Emissão: ${dataEmissao}`, ml, y);
-        doc.text(`Período: ${nomeMes} ${ano}`, ml + cw, y, { align: 'right' });
+        doc.text(`Período: ${periodoLabel}`, ml + cw, y, { align: 'right' });
         y += 8;
 
         sectionTitle('Demonstrativo do Resultado', y);
@@ -223,18 +229,17 @@ function RelatoriosPage({ mostrarToast }) {
         card(ml, cw, dreContentH, y);
         const ty = y + 4;
 
+        const innerX = ml + 4;
+        const innerW = cw - 8;
+        const colPad = 2;
         const headerLabels = ['Descrição', 'Valor'];
-        const headerWs = [cw * 0.7, cw * 0.3];
         doc.setFillColor(46, 204, 113);
-        doc.rect(ml + 4, ty, cw - 8, headerRowH, 'F');
+        doc.rect(innerX, ty, innerW, headerRowH, 'F');
         doc.setTextColor(10, 10, 10);
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        let hx = ml + 6;
-        headerLabels.forEach((l, i) => {
-          doc.text(l, hx + (i === 1 ? headerWs[i] - 2 : 0), ty + 5, i === 1 ? { align: 'right' } : undefined);
-          if (i === 0) hx += headerWs[i];
-        });
+        doc.text(headerLabels[0], innerX + colPad, ty + 5);
+        doc.text(headerLabels[1], innerX + innerW - colPad, ty + 5, { align: 'right' });
 
         let ry = ty + headerRowH;
         const dreRows = [
@@ -244,27 +249,27 @@ function RelatoriosPage({ mostrarToast }) {
         ];
         dreRows.forEach(([label, value, isAlt, isBold]) => {
           doc.setFillColor(isAlt ? 26 : 22, isAlt ? 29 : 26, isAlt ? 39 : 36);
-          doc.rect(ml + 4, ry, cw - 8, dataRowH, 'F');
+          doc.rect(innerX, ry, innerW, dataRowH, 'F');
           doc.setTextColor(isBold ? 255 : 200, isBold ? 255 : 200, isBold ? 180 : 180);
           doc.setFontSize(8);
           doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-          doc.text(label, ml + 6, ry + 5.5);
-          doc.text(value, ml + cw - 6, ry + 5.5, { align: 'right' });
+          doc.text(label, innerX + colPad, ry + 5.5);
+          doc.text(value, innerX + innerW - colPad, ry + 5.5, { align: 'right' });
           ry += dataRowH;
         });
 
         doc.setDrawColor(46, 204, 113);
         doc.setLineWidth(0.3);
-        doc.line(ml + 4, ry, ml + cw - 4, ry);
+        doc.line(innerX, ry, innerX + innerW, ry);
         ry += 3;
 
         doc.setFillColor(26, 29, 39);
-        doc.rect(ml + 4, ry, cw - 8, dataRowH, 'F');
+        doc.rect(innerX, ry, innerW, dataRowH, 'F');
         doc.setTextColor(46, 204, 113);
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.text('Boletos no Mês', ml + 6, ry + 5.5);
-        doc.text(String(m.total_boletos || 0), ml + cw - 6, ry + 5.5, { align: 'right' });
+        doc.text('Boletos no Mês', innerX + colPad, ry + 5.5);
+        doc.text(String(m.total_boletos || 0), innerX + innerW - colPad, ry + 5.5, { align: 'right' });
         ry += dataRowH + 2;
 
         y = ry + 8;
@@ -279,33 +284,26 @@ function RelatoriosPage({ mostrarToast }) {
 
           const ct = y + 4;
           doc.setFillColor(46, 204, 113);
-          doc.rect(ml + 4, ct, cw - 8, headerRowH, 'F');
+          doc.rect(innerX, ct, innerW, headerRowH, 'F');
           doc.setTextColor(10, 10, 10);
           doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
-          const catHeaders = ['Categoria', 'Valor', 'Qtd'];
-          const catWs = [cw * 0.55, cw * 0.3, cw * 0.15];
-          let chx = ml + 6;
-          catHeaders.forEach((l, i) => {
-            const isLast = i === catHeaders.length - 1;
-            doc.text(l, isLast ? chx + catWs[i] - 2 : chx, ct + 5, isLast ? { align: 'right' } : undefined);
-            chx += catWs[i];
-          });
+          const col2X = innerX + innerW * 0.7;
+          const col3X = innerX + innerW - colPad;
+          doc.text('Categoria', innerX + colPad, ct + 5);
+          doc.text('Valor', col2X + innerW * 0.3 - colPad, ct + 5, { align: 'right' });
+          doc.text('Qtd', col3X, ct + 5, { align: 'right' });
 
           let cry = ct + headerRowH;
           cats.forEach((c, i) => {
             doc.setFillColor(i % 2 === 0 ? 26 : 22, i % 2 === 0 ? 29 : 26, i % 2 === 0 ? 39 : 36);
-            doc.rect(ml + 4, cry, cw - 8, dataRowH, 'F');
+            doc.rect(innerX, cry, innerW, dataRowH, 'F');
             doc.setTextColor(200, 200, 180);
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
-            let cx2 = ml + 6;
-            const vals = [c.categoria, fmt(c.total), String(c.quantidade)];
-            vals.forEach((val, j) => {
-              const isLast = j === vals.length - 1;
-              doc.text(val, isLast ? cx2 + catWs[j] - 2 : cx2, cry + 5.5, isLast ? { align: 'right' } : undefined);
-              cx2 += catWs[j];
-            });
+            doc.text(c.categoria, innerX + colPad, cry + 5.5);
+            doc.text(fmt(c.total), col2X + innerW * 0.3 - colPad, cry + 5.5, { align: 'right' });
+            doc.text(String(c.quantidade), col3X, cry + 5.5, { align: 'right' });
             cry += dataRowH;
           });
           y = cry + 12;
