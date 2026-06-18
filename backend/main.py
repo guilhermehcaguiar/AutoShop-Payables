@@ -5,8 +5,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, validator
 from passlib.context import CryptContext
 from database import get_connection, Base, engine, migrar
-from jose import JWTError, ExpiredSignatureError
-import jwt
+from jose import JWTError, ExpiredSignatureError, jwt
 import os
 import csv
 import io
