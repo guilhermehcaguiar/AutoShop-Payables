@@ -10,7 +10,7 @@ function AdminPage({ mostrarToast }) {
   const AccordionSection = ({ indice, icone, titulo, descricao, children }) => (
     <div className="border-b border-atend-border last:border-b-0">
       <button onClick={() => setModuloAberto(moduloAberto === indice ? null : indice)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-colors active:scale-[0.99] focus:outline-none">
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-all duration-200 active:scale-[0.98] focus:outline-none">
         <div className="flex items-center gap-3">
           <span className="text-lg">{icone}</span>
           <div className="text-left">
@@ -18,9 +18,9 @@ function AdminPage({ mostrarToast }) {
             <p className="text-xs text-slate-400">{descricao}</p>
           </div>
         </div>
-        <span className={`text-slate-500 transition-transform duration-200 ${moduloAberto === indice ? 'rotate-180' : ''}`}>▼</span>
+        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${moduloAberto === indice ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
       </button>
-      <div className={`overflow-hidden transition-all duration-300 ${moduloAberto === indice ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${moduloAberto === indice ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
         <div className="px-5 pb-4">
           {children}
         </div>
@@ -414,7 +414,7 @@ function AdminPage({ mostrarToast }) {
       <AccordionSection indice={1} icone="📁" titulo="Gerenciar Usuários" descricao="Cadastro e permissões de usuários">
         <div className="mb-3 mt-1 flex justify-end">
           <button onClick={() => setCriando(true)}
-            className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10">
+            className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10">
             + Novo Usuário
           </button>
         </div>
@@ -432,14 +432,14 @@ function AdminPage({ mostrarToast }) {
             </thead>
             <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
               {usuarios.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-900/20 transition-colors">
+                <tr key={u.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
                   <td className="px-5 py-4 text-slate-500">{u.id}</td>
                   <td className="px-5 py-4 font-medium text-white">{u.nome}</td>
                   <td className="px-5 py-4 text-slate-400">{u.username}</td>
                   <td className="px-5 py-4 text-slate-400">{u.sexo === 'M' ? 'Masculino' : 'Feminino'}</td>
                   <td className="px-5 py-4">
                     <button onClick={() => toggleAdmin(u)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-200 active:scale-[0.98] focus:outline-none ${
                         u.admin ? 'bg-atend-verde/10 text-atend-verde border border-atend-verde/20' : 'bg-slate-800 text-slate-500 border border-slate-700'
                       }`}>
                       {u.admin ? 'Admin' : 'Usuário'}
@@ -448,9 +448,9 @@ function AdminPage({ mostrarToast }) {
                   <td className="px-5 py-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button onClick={() => { setEditando(u); setForm({ nome: u.nome, username: u.username }); }}
-                        className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all">✏️</button>
+                        className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-atend-verde/10">✏️</button>
                       <button onClick={() => setConfirmExcluir({ aberto: true, id: u.id, nome: u.nome })}
-                        className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all">🗑</button>
+                        className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-rose-500/10">🗑</button>
                     </div>
                   </td>
                 </tr>
@@ -470,7 +470,7 @@ function AdminPage({ mostrarToast }) {
         {editando && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
             <div className="fixed inset-0 bg-black/60" onClick={() => setEditando(null)} />
-            <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10">
+            <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 animate-fade-in-scale">
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Editar Usuário</h2>
@@ -488,7 +488,7 @@ function AdminPage({ mostrarToast }) {
                     className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" />
                 </div>
                 <button type="submit"
-                  className="w-full bg-atend-verde hover:opacity-90 text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all">
+                  className="w-full bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all duration-200">
                   Salvar
                 </button>
               </form>
@@ -499,7 +499,7 @@ function AdminPage({ mostrarToast }) {
         {criando && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
             <div className="fixed inset-0 bg-black/60" onClick={() => setCriando(false)} />
-            <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10">
+            <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 animate-fade-in-scale">
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Novo Usuário</h2>
@@ -532,11 +532,11 @@ function AdminPage({ mostrarToast }) {
                 {erroCriar && <div className="bg-rose-500/10 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erroCriar}</div>}
                 <div className="flex gap-3">
                   <button type="button" onClick={() => setCriando(false)}
-                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium py-2.5 rounded-lg border border-slate-700">
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] focus:outline-none text-slate-300 text-sm font-medium py-2.5 rounded-lg border border-slate-700 transition-all duration-200">
                     Cancelar
                   </button>
                   <button type="submit" disabled={carregandoCriar}
-                    className="flex-1 bg-atend-verde hover:opacity-90 disabled:opacity-50 text-slate-950 text-sm font-bold py-2.5 rounded-lg">
+                    className="flex-1 bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all duration-200">
                     {carregandoCriar ? 'Criando...' : 'Criar'}
                   </button>
                 </div>
@@ -563,7 +563,7 @@ function AdminPage({ mostrarToast }) {
                       placeholder="Novo nome"
                       className="w-40 bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-atend-verde/60" />
                     <button onClick={() => mesclarCategoria(nome)}
-                      className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all">
+                      className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all duration-200">
                       Mesclar
                     </button>
                     <button onClick={() => { setEditandoCategoria(null); setNovoNomeCategoria(''); }}
@@ -571,7 +571,7 @@ function AdminPage({ mostrarToast }) {
                   </div>
                 ) : (
                   <button onClick={() => { setEditandoCategoria(nome); setNovoNomeCategoria(nome); }}
-                    className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-3 py-1.5 rounded transition-all hover:bg-atend-verde/10">
+                    className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-3 py-1.5 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-atend-verde/10">
                     Editar / Mesclar
                   </button>
                 )}
@@ -599,7 +599,7 @@ function AdminPage({ mostrarToast }) {
                     placeholder="Limite mensal"
                     className="w-32 bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-white text-right focus:outline-none focus:border-atend-verde/60" />
                   <button onClick={() => salvarLimite(nome)}
-                    className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all">
+                    className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all duration-200">
                     Salvar
                   </button>
                 </div>
@@ -619,7 +619,7 @@ function AdminPage({ mostrarToast }) {
               <p className="text-xs text-slate-500">Exportar todos os boletos em CSV</p>
             </div>
             <button onClick={baixarBackup}
-              className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all">
+              className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all duration-200">
               Baixar
             </button>
           </div>
@@ -630,7 +630,7 @@ function AdminPage({ mostrarToast }) {
               <p className="text-sm font-medium text-white">Restaurar Banco de Dados</p>
               <p className="text-xs text-slate-500">Importar arquivo .json de backup</p>
             </div>
-            <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-slate-700 transition-all">
+            <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-300 text-xs font-semibold px-4 py-2 rounded-lg border border-slate-700 transition-all duration-200">
               Selecionar
               <input type="file" accept=".json" onChange={restaurarBackup} className="hidden" />
             </label>
@@ -655,7 +655,7 @@ function AdminPage({ mostrarToast }) {
                 <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ease-out ${backupAtivo ? 'translate-x-7 scale-105' : 'translate-x-0 scale-100'}`} />
               </button>
               <button onClick={executarBackup} disabled={executandoBackup || !backupAtivo || !smtpConfigurado}
-                className="relative bg-atend-verde hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all overflow-hidden">
+                className="relative bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all duration-200 overflow-hidden">
                 {executandoBackup ? (
                   <span className="flex items-center gap-1.5">
                     <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
@@ -676,7 +676,7 @@ function AdminPage({ mostrarToast }) {
               <p className="text-xs text-slate-500">Remove boletos antigos para liberar espaço</p>
             </div>
             <button onClick={() => setConfirmArquivar({ aberto: true, carregando: false })}
-              className="bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/30 text-xs font-bold px-4 py-2 rounded-lg transition-all">
+              className="bg-rose-600/10 hover:bg-rose-600/20 active:scale-[0.98] focus:outline-none text-rose-400 border border-rose-500/30 text-xs font-bold px-4 py-2 rounded-lg transition-all duration-200">
               Arquivar
             </button>
           </div>
@@ -743,14 +743,14 @@ function AdminPage({ mostrarToast }) {
                 </thead>
                 <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
                   {excluidos.map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-900/20 transition-colors">
+                    <tr key={b.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
                       <td className="px-3 py-3 text-slate-500">{b.id}</td>
                       <td className="px-3 py-3 font-medium text-white">{b.descricao || '—'}</td>
                       <td className="px-3 py-3 text-slate-400">R$ {Number(b.valor || 0).toFixed(2)}</td>
                       <td className="px-3 py-3 text-slate-400">{b.vencimento || '—'}</td>
                       <td className="px-3 py-3 text-right">
                         <button onClick={() => recuperarBoleto(b.id)}
-                          className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all hover:bg-atend-verde/10">
+                          className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-atend-verde/10">
                           Recuperar
                         </button>
                       </td>
@@ -785,7 +785,7 @@ function AdminPage({ mostrarToast }) {
                 </thead>
                 <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
                   {recorrentes.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-900/20 transition-colors">
+                    <tr key={r.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
                       <td className="px-3 py-3 text-slate-500">{r.id}</td>
                       <td className="px-3 py-3 font-medium text-white">{r.descricao || '—'}</td>
                       <td className="px-3 py-3 text-slate-400">R$ {Number(r.valor || 0).toFixed(2)}</td>
@@ -793,7 +793,7 @@ function AdminPage({ mostrarToast }) {
                       <td className="px-3 py-3 text-slate-400">{r.dia_vencimento || '—'}</td>
                       <td className="px-3 py-3 text-right">
                         <button onClick={() => deletarRecorrente(r.id)}
-                          className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all hover:bg-rose-500/10">
+                          className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-rose-500/10">
                           Excluir
                         </button>
                       </td>

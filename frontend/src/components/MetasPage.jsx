@@ -114,7 +114,7 @@ function MetasPage({ mostrarToast }) {
               className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" />
           </div>
           <button type="submit" disabled={salvando}
-            className="w-full sm:w-auto bg-atend-verde hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10 whitespace-nowrap">
+            className="w-full sm:w-auto bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10 whitespace-nowrap">
             {salvando ? 'Salvando...' : 'Salvar Meta'}
           </button>
         </form>
@@ -140,7 +140,7 @@ function MetasPage({ mostrarToast }) {
               </tr>
             ) : (
               metas.map((meta) => (
-                <tr key={meta.id} className="hover:bg-slate-900/20 transition-colors">
+                <tr key={meta.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
                   <td className="px-5 py-4 font-medium text-white">{meta.categoria}</td>
                   <td className="px-5 py-4 text-atend-verde font-semibold">
                     R$ {meta.limite_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

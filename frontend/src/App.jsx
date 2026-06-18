@@ -390,11 +390,11 @@ function App() {
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <button onClick={lidarComExportarCSV}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-2.5 rounded-lg transition-all border border-slate-700">
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98] focus:outline-none border border-slate-700">
             📥 CSV
           </button>
           <button onClick={() => { setBoletoEditando(null); setModalAberto(true); }}
-            className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10">
+            className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98] focus:outline-none shadow-lg shadow-atend-verde/10">
             + Novo Boleto
           </button>
         </div>
@@ -411,7 +411,7 @@ function App() {
             <button
               key={chave}
               onClick={() => { setFiltroStatus(chave); setSelecionados(new Set()); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 active:scale-[0.98] focus:outline-none ${
                 filtroStatus === chave
                   ? 'bg-atend-verde/15 text-atend-verde shadow-sm shadow-atend-verde/10'
                   : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
@@ -428,7 +428,7 @@ function App() {
             <select
               value={mesSelecionado}
               onChange={(e) => { setMesSelecionado(e.target.value); setSelecionados(new Set()); }}
-              className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat"
+              className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
               style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}
             >
               {meses.map(({ valor, rotulo }) => (
@@ -441,7 +441,7 @@ function App() {
           {diasDisponiveis.length > 0 && (
             <div className="relative">
               <select value={filtroDia} onChange={(e) => setFiltroDia(e.target.value)}
-                className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat"
+                className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}>
                 <option value="">Dia</option>
                 {diasDisponiveis.map((d) => (
@@ -454,7 +454,7 @@ function App() {
 
           <div className="relative flex-1 min-w-[140px] max-w-[200px]">
             <select value={filtroFornecedor} onChange={(e) => setFiltroFornecedor(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer">
+              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer transition-all duration-200">
               <option value="">Todos fornecedores</option>
               {fornecedoresDisponiveis.map((f) => (
                 <option key={f} value={f}>{f}</option>
@@ -499,7 +499,7 @@ function App() {
               boletosPg.map((boleto) => (
                 <tr key={boleto.id}
                   onClick={() => abrirModalAcao(boleto)}
-                  className={`cursor-pointer hover:bg-slate-900/20 even:bg-slate-900/10 transition-colors ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5 even:bg-rose-500/10' : ''}`}>
+                  className={`cursor-pointer hover:bg-slate-900/20 even:bg-slate-900/10 transition-all duration-150 active:scale-[0.99] ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5 even:bg-rose-500/10' : ''}`}>                  
                   <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selecionados.has(boleto.id)}
                       onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
@@ -550,7 +550,7 @@ function App() {
         </table>
       </div>
 
-      <div className="md:hidden divide-y divide-atend-border/50">
+      <div className="md:hidden space-y-2 p-2">
         {carregandoBoletos ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
         ) : boletosFiltrados.length === 0 ? (
@@ -561,7 +561,7 @@ function App() {
         ) : (
           boletosPg.map((boleto) => (
             <div key={boleto.id} onClick={() => abrirModalAcao(boleto)}
-              className={`px-5 py-4 cursor-pointer active:bg-slate-800/30 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
+              className={`rounded-xl border border-atend-border bg-atend-card px-4 py-4 cursor-pointer transition-all duration-200 active:scale-[0.98] hover:border-atend-verde/30 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'border-rose-500/30' : ''}`}>
               <div className="flex items-start gap-3">
                 <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" checked={selecionados.has(boleto.id)}
@@ -596,7 +596,7 @@ function App() {
           ))
         )}
         {boletosFiltrados.length > 0 && (
-          <div className="px-5 py-4 bg-slate-900/40 border-t border-atend-border">
+          <div className="rounded-xl border border-atend-border bg-atend-card/80 px-4 py-3">
             <div className="flex justify-between text-sm font-semibold">
               <span className="text-slate-400 uppercase tracking-wider text-xs">Total</span>
               <span className="text-white">{formatarMoeda(totalExibido)}</span>
@@ -608,17 +608,17 @@ function App() {
       {totalPaginas > 1 && (
         <div className="flex items-center justify-center gap-2 pt-4 pb-2">
           <button onClick={() => setPg(pg - 1)} disabled={pg <= 1}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 active:scale-[0.98] focus:outline-none">
             ‹ Anterior
           </button>
           {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((p) => (
             <button key={p} onClick={() => setPg(p)}
-              className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${p === pg ? 'bg-atend-verde text-slate-950' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'}`}>
+              className={`w-8 h-8 rounded-lg text-xs font-medium transition-all duration-200 active:scale-[0.98] focus:outline-none ${p === pg ? 'bg-atend-verde text-slate-950' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'}`}>
               {p}
             </button>
           ))}
           <button onClick={() => setPg(pg + 1)} disabled={pg >= totalPaginas}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 active:scale-[0.98] focus:outline-none">
             Próximo ›
           </button>
         </div>
@@ -701,7 +701,7 @@ function App() {
                   </div>
                 )}
                 <button type="submit" disabled={carregandoSenha}
-                  className="bg-atend-verde hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10">
+                  className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10">
                   {carregandoSenha ? 'Alterando...' : 'Alterar Senha'}
                 </button>
               </form>
@@ -739,7 +739,7 @@ function App() {
             </div>
             {erro && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg p-3 text-center animate-pulse">⚠️ {erro}</div>}
             <button type="submit"
-              className="w-full bg-atend-verde hover:opacity-90 text-slate-950 font-bold uppercase tracking-wider text-xs py-3.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10 mt-2">Login</button>
+              className="w-full bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 font-bold uppercase tracking-wider text-xs py-3.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10 mt-2">Login</button>
           </form>
         </div>
       </div>
@@ -765,7 +765,7 @@ function App() {
           <div className="flex items-center justify-between px-4 py-3.5">
             <button
               onClick={() => setSidebarAberta((prev) => !prev)}
-              className="text-slate-400 hover:text-white text-xl p-1"
+              className="text-slate-400 hover:text-white text-xl p-1 active:scale-[0.98] transition-all duration-200"
               aria-label="Abrir menu"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -850,9 +850,9 @@ function App() {
       </div>
 
       {selecionados.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up">
           <button onClick={lidarComPagarLote}
-            className="bg-atend-verde hover:opacity-90 text-slate-950 text-sm font-bold px-6 py-3 rounded-xl shadow-2xl shadow-atend-verde/20 flex items-center gap-2 transition-all">
+            className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold px-6 py-3 rounded-xl shadow-2xl shadow-atend-verde/20 flex items-center gap-2 transition-all duration-200">
             ✔ Pagar Selecionados ({selecionados.size})
           </button>
         </div>

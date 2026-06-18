@@ -14,6 +14,8 @@
   --color-atend-border: var(--c-border);
   --color-atend-verde: #2ecc71;
   --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-fade-in-scale: fade-in-scale 0.25s ease-out;
+  --animate-slide-up: slide-up 0.3s ease-out;
 }
 
 :root,
@@ -21,6 +23,9 @@
   --c-bg: #0f1117;
   --c-card: #1a1d27;
   --c-border: #2a2d3a;
+  --c-tooltip-bg: #1e293b;
+  --c-tooltip-border: #334155;
+  --c-tooltip-color: #f1f5f9;
   color-scheme: dark;
 }
 
@@ -28,6 +33,9 @@
   --c-bg: #f1f5f9;
   --c-card: #ffffff;
   --c-border: #e2e8f0;
+  --c-tooltip-bg: #ffffff;
+  --c-tooltip-border: #e2e8f0;
+  --c-tooltip-color: #1e293b;
   color-scheme: light;
 }
 
@@ -123,4 +131,22 @@ button:focus-visible {
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in-scale {
+  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-scale {
+  animation: fade-in-scale 0.25s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
 }

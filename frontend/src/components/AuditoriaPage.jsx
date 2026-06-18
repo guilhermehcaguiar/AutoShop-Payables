@@ -61,7 +61,7 @@ function AuditoriaPage() {
             {registros.length === 0 ? (
               <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-500 italic">Nenhum registro de auditoria.</td></tr>
             ) : registros.map((r) => (
-              <tr key={r.id} className="hover:bg-slate-900/20 transition-colors">
+              <tr key={r.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
                 <td className="px-5 py-4 text-slate-400 text-xs whitespace-nowrap">
                   {new Date(r.criado_em + 'Z').toLocaleString('pt-BR')}
                 </td>

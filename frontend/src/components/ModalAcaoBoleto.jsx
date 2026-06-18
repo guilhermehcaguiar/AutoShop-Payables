@@ -25,7 +25,7 @@ function ModalAcaoBoleto({ aberto, boleto, onFechar, onEditar, onPagar, onDeleta
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="fixed inset-0 bg-black/60" onClick={onFechar} />
-      <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 max-h-[85vh] overflow-y-auto">
+      <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 max-h-[85vh] overflow-y-auto animate-fade-in-scale">
         <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
         <div className="flex justify-between items-center mb-6 mt-1">
           <h2 className="text-lg font-bold text-white">Detalhes do Boleto</h2>
@@ -92,26 +92,26 @@ function ModalAcaoBoleto({ aberto, boleto, onFechar, onEditar, onPagar, onDeleta
           {pago ? (
             <>
               <button onClick={() => onEditar(boleto)}
-                className="flex-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 text-sm font-medium py-2.5 rounded-lg transition-colors border border-sky-500/30">
+                className="flex-1 bg-sky-500/20 hover:bg-sky-500/30 active:scale-[0.98] focus:outline-none text-sky-400 text-sm font-medium py-2.5 rounded-lg transition-all duration-200 border border-sky-500/30">
                 ✏️ Editar
               </button>
               <button onClick={() => onDesfazerPagamento(boleto.id)}
-                className="flex-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium py-2.5 rounded-lg transition-colors border border-amber-500/30">
+                className="flex-1 bg-amber-500/20 hover:bg-amber-500/30 active:scale-[0.98] focus:outline-none text-amber-400 text-sm font-medium py-2.5 rounded-lg transition-all duration-200 border border-amber-500/30">
                 ↩ Desfazer
               </button>
             </>
           ) : (
             <>
               <button onClick={() => onEditar(boleto)}
-                className="flex-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 text-sm font-medium py-2.5 rounded-lg transition-colors border border-sky-500/30">
+                className="flex-1 bg-sky-500/20 hover:bg-sky-500/30 active:scale-[0.98] focus:outline-none text-sky-400 text-sm font-medium py-2.5 rounded-lg transition-all duration-200 border border-sky-500/30">
                 ✏️ Editar
               </button>
               <button onClick={() => onPagar(boleto.id)}
-                className="flex-1 bg-atend-verde hover:opacity-90 text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all">
+                className="flex-1 bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all duration-200">
                 ✔ Pagar
               </button>
               <button onClick={() => onDeletar(boleto.id)}
-                className="flex-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-sm font-medium py-2.5 rounded-lg transition-colors border border-rose-500/30">
+                className="flex-1 bg-rose-500/20 hover:bg-rose-500/30 active:scale-[0.98] focus:outline-none text-rose-400 text-sm font-medium py-2.5 rounded-lg transition-all duration-200 border border-rose-500/30">
                 🗑 Deletar
               </button>
             </>

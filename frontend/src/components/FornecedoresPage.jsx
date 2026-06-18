@@ -93,7 +93,7 @@ function FornecedoresPage({ mostrarToast }) {
           <p className="text-xs text-slate-400">Cadastro de fornecedores da oficina</p>
         </div>
         <button onClick={() => abrirModal()}
-          className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all shadow-lg shadow-atend-verde/10">
+          className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10">
           + Novo
         </button>
       </div>
@@ -113,7 +113,7 @@ function FornecedoresPage({ mostrarToast }) {
             {fornecedores.length === 0 ? (
               <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-500 italic">Nenhum fornecedor cadastrado.</td></tr>
             ) : fornecedores.map((f) => (
-              <tr key={f.id} className="hover:bg-slate-900/20 transition-colors">
+              <tr key={f.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
                 <td className="px-5 py-4 font-medium text-white">{f.nome}</td>
                 <td className="px-5 py-4 text-slate-400">{f.cnpj || '-'}</td>
                 <td className="px-5 py-4 text-slate-400">{f.telefone || '-'}</td>
@@ -121,9 +121,9 @@ function FornecedoresPage({ mostrarToast }) {
                 <td className="px-5 py-4 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <button onClick={() => abrirModal(f)}
-                      className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all">✏️</button>
+                      className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-atend-verde/10">✏️</button>
                     <button onClick={() => setConfirmExcluir({ aberto: true, id: f.id })}
-                      className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all">🗑</button>
+                      className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-rose-500/10">🗑</button>
                   </div>
                 </td>
               </tr>
@@ -143,7 +143,7 @@ function FornecedoresPage({ mostrarToast }) {
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="fixed inset-0 bg-black/60" onClick={() => setModalAberto(false)} />
-          <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10">
+          <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 animate-fade-in-scale">
             <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
             <div className="flex justify-between items-center mb-6 mt-1">
               <h2 className="text-lg font-bold text-white">{editando ? 'Editar' : 'Novo'} Fornecedor</h2>
@@ -172,7 +172,7 @@ function FornecedoresPage({ mostrarToast }) {
               </div>
               {erro && <div className="bg-rose-500/10 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erro}</div>}
               <button type="submit"
-                className="w-full bg-atend-verde hover:opacity-90 text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all">
+                className="w-full bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all duration-200">
                 {editando ? 'Atualizar' : 'Salvar'}
               </button>
             </form>

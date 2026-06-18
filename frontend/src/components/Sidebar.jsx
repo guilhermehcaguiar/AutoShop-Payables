@@ -83,7 +83,7 @@ function Sidebar({ aberta, setAberta, paginaAtual, setPaginaAtual, onSair, tema,
               { valor: 'system', icone: '💻' },
             ].map(({ valor, icone }) => (
               <button key={valor} onClick={() => onTemaChange(valor)}
-                className={`flex-1 flex items-center justify-center px-2 py-2 rounded-lg text-xs font-medium transition-all ${
+                className={`flex-1 flex items-center justify-center px-2 py-2 rounded-lg text-xs font-medium transition-all duration-200 active:scale-[0.98] focus:outline-none ${
                   tema === valor
                     ? 'bg-atend-verde/10 text-atend-verde border border-atend-verde/20'
                     : 'text-slate-500 hover:text-white hover:bg-slate-800/50 border border-transparent'
@@ -96,7 +96,7 @@ function Sidebar({ aberta, setAberta, paginaAtual, setPaginaAtual, onSair, tema,
 
         <div className="px-3 py-4 border-t border-atend-border">
           <button onClick={onSair}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-200 active:scale-[0.98] focus:outline-none">
             <span className="text-lg">🚪</span>
             Sair
           </button>

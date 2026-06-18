@@ -81,22 +81,22 @@ function RelatoriosPage() {
       <div className="flex items-center gap-4 flex-wrap">
         <h2 className="text-xl font-bold text-white">Relatório {nomeMes} {ano}</h2>
         <select value={mes} onChange={(e) => { setMes(Number(e.target.value)); setDiaInicio(''); setDiaFim(''); }}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
             <option key={m} value={m}>{new Date(ano, m - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase())}</option>
           ))}
         </select>
         <select value={ano} onChange={(e) => setAno(Number(e.target.value))}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
           {[agora.getFullYear(), agora.getFullYear() - 1].map((a) => (<option key={a} value={a}>{a}</option>))}
         </select>
         <select value={diaInicio} onChange={(e) => setDiaInicio(e.target.value)}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
           <option value="">De</option>
           {dias.map((d) => (<option key={d} value={d}>Dia {d}</option>))}
         </select>
         <select value={diaFim} onChange={(e) => setDiaFim(e.target.value)}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
           <option value="">Até</option>
           {dias.map((d) => (<option key={d} value={d}>Dia {d}</option>))}
         </select>
@@ -146,12 +146,12 @@ function RelatoriosPage() {
                     <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} />
                     <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                     <Tooltip
-                      contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }}
+                      contentStyle={{ background: 'var(--c-tooltip-bg, #1e293b)', border: '1px solid var(--c-tooltip-border, #334155)', borderRadius: 8, color: 'var(--c-tooltip-color, #f1f5f9)', fontSize: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
                       formatter={(value) => formatar(value)}
                     />
                     <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
                     {categoriasGrafico.map((cat, i) => (
-                      <Bar key={cat} dataKey={cat} stackId="a" fill={CORES[i % CORES.length]} radius={[0, 0, 0, 0]} />
+                      <Bar key={cat} dataKey={cat} stackId="a" fill={CORES[i % CORES.length]} radius={[4, 4, 0, 0]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
@@ -169,7 +169,7 @@ function RelatoriosPage() {
                     <XAxis dataKey="mes" tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={(v) => { const [a, m] = v.split('-'); return `${m}/${a.slice(2)}`; }} />
                     <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                     <Tooltip
-                      contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }}
+                      contentStyle={{ background: 'var(--c-tooltip-bg, #1e293b)', border: '1px solid var(--c-tooltip-border, #334155)', borderRadius: 8, color: 'var(--c-tooltip-color, #f1f5f9)', fontSize: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
                       formatter={(value) => formatar(value)}
                       labelFormatter={(label) => { const [a, m] = label.split('-'); return `${m}/${a}`; }}
                     />
@@ -236,7 +236,7 @@ function RelatoriosPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-white">📋 Demonstrativo do Resultado (DRE)</h3>
               <button onClick={exportarPDF}
-                className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all">
+                className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all duration-200">
                 Exportar PDF
               </button>
             </div>
@@ -289,7 +289,7 @@ function RelatoriosPage() {
                     </thead>
                     <tbody className="divide-y divide-atend-border/50 text-sm">
                       {porCategoria.map((c, i) => (
-                        <tr key={i} className="hover:bg-slate-900/20 transition-colors">
+                        <tr key={i} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
                           <td className="px-4 py-2 text-slate-300">{c.categoria}</td>
                           <td className="px-4 py-2 text-right text-white font-medium">{formatar(c.total)}</td>
                           <td className="px-4 py-2 text-right text-slate-400">{c.quantidade}x</td>
