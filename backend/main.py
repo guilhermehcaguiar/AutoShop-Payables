@@ -1,16 +1,28 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from passlib.context import CryptContext
 from database import get_connection, Base, engine, migrar
+from jose import JWTError, ExpiredSignatureError
 import jwt
 import os
 import csv
 import io
+import smtplib
+import json
+import time
+import zipfile
+import tempfile
 from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+from email.utils import formatdate
 from dotenv import load_dotenv
+from calendar import monthrange
 
 load_dotenv()
 
@@ -29,9 +41,16 @@ app.add_middleware(
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = "HS256"
+SMTP_SERVER = os.getenv("SMTP_SERVER", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "")
+EMAIL_TO_BACKUP = os.getenv("EMAIL_TO_BACKUP", "")
+BACKUP_SCHEDULED = os.getenv("BACKUP_SCHEDULED", "false").lower() == "true"
 
+# === SCHEMAS PYDANTIC E MODELOS DE DADOS ===
+####################################################################################################
 class UsuarioCreate(BaseModel):
     nome: str
     sexo: str
@@ -42,23 +61,6 @@ class UsuarioUpdate(BaseModel):
     nome: str | None = None
     username: str | None = None
     admin: int | None = None
-
-class BoletoCreate(BaseModel):
-    fornecedor: str
-    valor: float
-    vencimento: str
-    codigo_barras: str | None = None
-    categoria: str | None = None
-
-class BoletoUpdate(BaseModel):
-    fornecedor: str | None = None
-    valor: float | None = None
-    vencimento: str | None = None
-    codigo_barras: str | None = None
-    categoria: str | None = None
-
-class BoletoPagarLote(BaseModel):
-    ids: list[int]
 
 class AlterarSenha(BaseModel):
     senha_atual: str
@@ -76,15 +78,75 @@ class FornecedorUpdate(BaseModel):
     telefone: str | None = None
     email: str | None = None
 
+class FornecedorCreateBackup(BaseModel):
+    id: int | None = None
+    nome: str
+    cnpj: str | None = None
+    telefone: str | None = None
+    email: str | None = None
+
+class BoletoCreate(BaseModel):
+    fornecedor: str
+    valor: float
+    vencimento: str
+    codigo_barras: str
+    categoria: str
+    descricao: str | None = None
+    metodo_pagamento: str | None = None
+    banco: str | None = None
+
+    @validator("codigo_barras", "categoria", pre=True, always=True)
+    def nao_vazio(cls, v):
+        if not v or (isinstance(v, str) and v.strip() == ""):
+            raise ValueError("Este campo não pode estar vazio")
+        return v.strip()
+
+class BoletoUpdate(BaseModel):
+    fornecedor: str | None = None
+    valor: float | None = None
+    vencimento: str | None = None
+    codigo_barras: str | None = None
+    categoria: str | None = None
+    descricao: str | None = None
+    metodo_pagamento: str | None = None
+    banco: str | None = None
+
+class BoletoCreateBackup(BaseModel):
+    fornecedor: str
+    valor: float
+    vencimento: str | None = None
+    codigo_barras: str | None = None
+    categoria: str
+    descricao: str | None = None
+    metodo_pagamento: str | None = None
+    banco: str | None = None
+    status: str | None = "Pendente"
+
+class BoletoPagarLote(BaseModel):
+    ids: list[int]
+
+class BackupPayload(BaseModel):
+    boletos: list[BoletoCreateBackup] | None = []
+    fornecedores: list[FornecedorCreateBackup] | None = []
+
+class MesclarCategorias(BaseModel):
+    nome_antigo: str
+    nome_novo: str
+
+# === DEPENDÊNCIAS E TRAVAS DE SEGURANÇA (JWT/ADMIN) ===
+####################################################################################################
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+ALGORITHM = "HS256"
+
 def get_usuario_logado(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         if not username:
             raise HTTPException(status_code=401, detail="Token inválido")
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
-    except jwt.InvalidTokenError:
+    except JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
 
     conexao = get_connection()
@@ -99,10 +161,34 @@ def get_usuario_logado(token: str = Depends(oauth2_scheme)):
     return {"id": usuario[0], "nome": usuario[1], "sexo": usuario[2], "admin": usuario[3]}
 
 
-def get_admin_logado(usuario: dict = Depends(get_usuario_logado)):
-    if not usuario.get("admin"):
-        raise HTTPException(status_code=403, detail="Acesso restrito ao administrador")
-    return usuario
+security_bearer = HTTPBearer()
+
+
+def get_current_admin_user(credentials: HTTPAuthorizationCredentials = Depends(security_bearer)):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token expirado")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id, nome, sexo, admin FROM usuarios WHERE username = %s", (username,))
+    usuario = cursor.fetchone()
+    conexao.close()
+
+    if not usuario:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuário não encontrado")
+
+    if not usuario[3]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito ao administrador")
+
+    return {"id": usuario[0], "nome": usuario[1], "sexo": usuario[2], "admin": usuario[3]}
 
 
 def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
@@ -119,6 +205,21 @@ def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
         pass
 
 
+def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
+    try:
+        conexao = get_connection()
+        cursor = conexao.cursor()
+        cursor.execute(
+            "INSERT INTO auditoria (acao, entidade, entidade_id, usuario_id, detalhes) VALUES (%s, %s, %s, %s, %s)",
+            (acao, entidade, entidade_id, usuario_id, detalhes)
+        )
+        conexao.commit()
+        conexao.close()
+    except Exception:
+        pass
+
+# === ROTAS PÚBLICAS E AUTENTICAÇÃO ===
+####################################################################################################
 @app.get("/")
 def root():
     return {"mensagem": "API Financeiro Atend-Car rodando!", "docs": "/docs"}
@@ -181,7 +282,7 @@ def perfil_usuario(usuario: dict = Depends(get_usuario_logado)):
 
 
 @app.delete("/usuarios/{usuario_id}")
-def excluir_usuario(usuario_id: int, admin: dict = Depends(get_admin_logado)):
+def excluir_usuario(usuario_id: int, admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM usuarios WHERE id = %s", (usuario_id,))
@@ -215,7 +316,7 @@ def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logad
 
 
 @app.get("/admin/usuarios/")
-def listar_usuarios(admin: dict = Depends(get_admin_logado)):
+def listar_usuarios(admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id, nome, sexo, username, admin FROM usuarios ORDER BY id")
@@ -227,7 +328,7 @@ def listar_usuarios(admin: dict = Depends(get_admin_logado)):
 
 
 @app.put("/admin/usuarios/{usuario_id}")
-def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depends(get_admin_logado)):
+def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("SELECT id FROM usuarios WHERE id = %s", (usuario_id,))
@@ -238,14 +339,18 @@ def atualizar_usuario(usuario_id: int, dados: UsuarioUpdate, admin: dict = Depen
     campos = []
     valores = []
     if dados.nome is not None:
-        campos.append("nome = %s"); valores.append(dados.nome)
+        campos.append("nome = %s")
+        valores.append(dados.nome)
     if dados.username is not None:
-        campos.append("username = %s"); valores.append(dados.username)
+        campos.append("username = %s")
+        valores.append(dados.username)
     if dados.admin is not None:
-        campos.append("admin = %s"); valores.append(dados.admin)
+        campos.append("admin = %s")
+        valores.append(dados.admin)
     if campos:
         valores.append(usuario_id)
-        cursor.execute(f"UPDATE usuarios SET {', '.join(campos)} WHERE id = %s", valores)
+        query = "UPDATE usuarios SET " + ", ".join(campos) + " WHERE id = %s"
+        cursor.execute(query, valores)
         conexao.commit()
     conexao.close()
     registrar_auditoria("editar", "usuario", usuario_id, admin["id"], f"Campos alterados: {', '.join(campos)}")
@@ -292,16 +397,21 @@ def atualizar_fornecedor(fornecedor_id: int, dados: FornecedorUpdate, usuario: d
     campos = []
     valores = []
     if dados.nome is not None:
-        campos.append("nome = %s"); valores.append(dados.nome)
+        campos.append("nome = %s")
+        valores.append(dados.nome)
     if dados.cnpj is not None:
-        campos.append("cnpj = %s"); valores.append(dados.cnpj)
+        campos.append("cnpj = %s")
+        valores.append(dados.cnpj)
     if dados.telefone is not None:
-        campos.append("telefone = %s"); valores.append(dados.telefone)
+        campos.append("telefone = %s")
+        valores.append(dados.telefone)
     if dados.email is not None:
-        campos.append("email = %s"); valores.append(dados.email)
+        campos.append("email = %s")
+        valores.append(dados.email)
     if campos:
         valores.append(fornecedor_id)
-        cursor.execute(f"UPDATE fornecedores SET {', '.join(campos)} WHERE id = %s", valores)
+        query = "UPDATE fornecedores SET " + ", ".join(campos) + " WHERE id = %s"
+        cursor.execute(query, valores)
         conexao.commit()
     conexao.close()
     return {"mensagem": "Fornecedor atualizado com sucesso!"}
@@ -327,7 +437,7 @@ def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
     cursor.execute("""
-        SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em
+        SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em, descricao, metodo_pagamento, banco
         FROM boletos ORDER BY vencimento ASC
     """)
     boletos = []
@@ -335,29 +445,38 @@ def listar_boletos(usuario: dict = Depends(get_usuario_logado)):
         boletos.append({
             "id": linha[0], "fornecedor": linha[1], "valor": linha[2],
             "vencimento": linha[3], "codigo_barras": linha[4], "status": linha[5],
-            "usuario_id": linha[6], "categoria": linha[7], "criado_em": linha[8]
+            "usuario_id": linha[6], "categoria": linha[7], "criado_em": linha[8],
+            "descricao": linha[9], "metodo_pagamento": linha[10], "banco": linha[11]
         })
     conexao.close()
     return boletos
 
 
 @app.post("/boletos/")
-def criar_boleto(boleto: BoletoCreate, usuario: dict = Depends(get_usuario_logado)):
+def criar_boleto(boleto: BoletoCreate, background_tasks: BackgroundTasks, usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
     try:
+        cursor.execute("SELECT id FROM boletos WHERE codigo_barras = %s", (boleto.codigo_barras,))
+        if cursor.fetchone():
+            conexao.close()
+            raise HTTPException(status_code=400, detail="Já existe um boleto cadastrado com este código de barras")
+
         cursor.execute("""
-            INSERT INTO boletos (fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id)
-            VALUES (%s, %s, %s, %s, 'Pendente', %s, %s)
+            INSERT INTO boletos (fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco)
+            VALUES (%s, %s, %s, %s, 'Pendente', %s, %s, %s, %s, %s)
             RETURNING id
-        """, (boleto.fornecedor, boleto.valor, boleto.vencimento, boleto.codigo_barras, boleto.categoria, usuario["id"]))
+        """, (boleto.fornecedor, boleto.valor, boleto.vencimento, boleto.codigo_barras,
+              boleto.categoria, usuario["id"], boleto.descricao, boleto.metodo_pagamento, boleto.banco))
         boleto_id = cursor.fetchone()[0]
         conexao.commit()
+    except HTTPException:
+        raise
     except Exception as e:
         conexao.close()
         raise HTTPException(status_code=400, detail=f"Erro ao cadastrar boleto: {e}")
     conexao.close()
-    registrar_auditoria("criar", "boleto", boleto_id, usuario["id"], f"Boleto {boleto.fornecedor} R$ {boleto.valor}")
+    background_tasks.add_task(registrar_auditoria, "criar", "boleto", boleto_id, usuario["id"], f"Boleto {boleto.fornecedor} R$ {boleto.valor}")
     return {"mensagem": "Boleto cadastrado com sucesso!", "id": boleto_id}
 
 
@@ -372,18 +491,33 @@ def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(g
     campos = []
     valores = []
     if dados.fornecedor is not None:
-        campos.append("fornecedor = %s"); valores.append(dados.fornecedor)
+        campos.append("fornecedor = %s")
+        valores.append(dados.fornecedor)
     if dados.valor is not None:
-        campos.append("valor = %s"); valores.append(dados.valor)
+        campos.append("valor = %s")
+        valores.append(dados.valor)
     if dados.vencimento is not None:
-        campos.append("vencimento = %s"); valores.append(dados.vencimento)
+        campos.append("vencimento = %s")
+        valores.append(dados.vencimento)
     if dados.codigo_barras is not None:
-        campos.append("codigo_barras = %s"); valores.append(dados.codigo_barras)
+        campos.append("codigo_barras = %s")
+        valores.append(dados.codigo_barras)
     if dados.categoria is not None:
-        campos.append("categoria = %s"); valores.append(dados.categoria)
+        campos.append("categoria = %s")
+        valores.append(dados.categoria)
+    if dados.descricao is not None:
+        campos.append("descricao = %s")
+        valores.append(dados.descricao)
+    if dados.metodo_pagamento is not None:
+        campos.append("metodo_pagamento = %s")
+        valores.append(dados.metodo_pagamento)
+    if dados.banco is not None:
+        campos.append("banco = %s")
+        valores.append(dados.banco)
     if campos:
         valores.append(boleto_id)
-        cursor.execute(f"UPDATE boletos SET {', '.join(campos)} WHERE id = %s", valores)
+        query = "UPDATE boletos SET " + ", ".join(campos) + " WHERE id = %s"
+        cursor.execute(query, valores)
         conexao.commit()
     conexao.close()
     registrar_auditoria("editar", "boleto", boleto_id, usuario["id"], f"Campos alterados: {', '.join(campos)}")
@@ -407,12 +541,13 @@ def pagar_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
 
 @app.post("/boletos/pagar-lote")
 def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuario_logado)):
-    if not dados.ids:
-        raise HTTPException(status_code=400, detail="Nenhum boleto selecionado")
     conexao = get_connection()
     cursor = conexao.cursor()
-    placeholders = ",".join("%s" for _ in dados.ids)
-    cursor.execute(f"UPDATE boletos SET status = 'Pago' WHERE id IN ({placeholders})", tuple(dados.ids))
+    if not dados.ids:
+        raise HTTPException(status_code=400, detail="Nenhum boleto selecionado")
+    placeholders = ",".join(["%s"] * len(dados.ids))
+    query = "UPDATE boletos SET status = 'Pago' WHERE id IN ({})".format(placeholders)
+    cursor.execute(query, tuple(dados.ids))
     conexao.commit()
     linhas_afetadas = cursor.rowcount
     conexao.close()
@@ -455,13 +590,13 @@ def notificacoes(usuario: dict = Depends(get_usuario_logado)):
 def exportar_csv(usuario: dict = Depends(get_usuario_logado)):
     conexao = get_connection()
     cursor = conexao.cursor()
-    cursor.execute("SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, criado_em FROM boletos ORDER BY vencimento")
+    cursor.execute("SELECT id, fornecedor, valor, vencimento, codigo_barras, status, categoria, criado_em, descricao, metodo_pagamento, banco FROM boletos ORDER BY vencimento")
     linhas = cursor.fetchall()
     conexao.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "Fornecedor", "Valor", "Vencimento", "Código Barras", "Status", "Categoria", "Criado em"])
+    writer.writerow(["ID", "Fornecedor", "Valor", "Vencimento", "Código Barras", "Status", "Categoria", "Criado em", "Descrição", "Método Pagamento", "Banco"])
     for linha in linhas:
         writer.writerow(linha)
 
@@ -574,3 +709,279 @@ def listar_auditoria(usuario: dict = Depends(get_usuario_logado)):
         })
     conexao.close()
     return registros
+
+
+@app.get("/boletos/bancos-utilizados")
+def bancos_utilizados(usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT DISTINCT banco FROM boletos WHERE banco IS NOT NULL ORDER BY banco")
+    bancos = [linha[0] for linha in cursor.fetchall()]
+    conexao.close()
+    return bancos
+
+
+@app.get("/boletos/categorias-utilizadas")
+def categorias_utilizadas(usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT DISTINCT categoria FROM boletos WHERE categoria IS NOT NULL ORDER BY categoria")
+    categorias = [linha[0] for linha in cursor.fetchall()]
+    conexao.close()
+    return categorias
+
+
+@app.patch("/boletos/{boleto_id}/desfazer-pagamento")
+def desfazer_pagamento(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    cursor.execute("SELECT id, status FROM boletos WHERE id = %s", (boleto_id,))
+    boleto = cursor.fetchone()
+    if not boleto:
+        conexao.close()
+        raise HTTPException(status_code=404, detail="Boleto não encontrado")
+    if boleto[1] != "Pago":
+        conexao.close()
+        raise HTTPException(status_code=400, detail="Apenas boletos com status 'Pago' podem ter o pagamento desfeito")
+    cursor.execute(
+        "UPDATE boletos SET status = 'Pendente', metodo_pagamento = NULL, banco = NULL WHERE id = %s",
+        (boleto_id,)
+    )
+    conexao.commit()
+    conexao.close()
+    registrar_auditoria("desfazer_pagamento", "boleto", boleto_id, usuario["id"], "Pagamento desfeito")
+    return {"mensagem": "Pagamento desfeito com sucesso! Boleto retornou para 'Pendente'."}
+
+
+@app.get("/boletos/projecao-fluxo")
+def projecao_fluxo(
+    ano: int | None = None,
+    mes: int | None = None,
+    dia_inicio: int | None = None,
+    dia_fim: int | None = None,
+    usuario: dict = Depends(get_usuario_logado)
+):
+    """
+    Busca boletos pendentes agrupados por períodos futuros, divididos internamente por categoria.
+    Filtros opcionais: ano, mes, dia_inicio, dia_fim
+    """
+    hoje = datetime.now()
+    ano_alvo = ano if ano is not None else hoje.year
+    mes_alvo = mes if mes is not None else hoje.month
+
+    from calendar import monthrange
+    _, ultimo_dia = monthrange(ano_alvo, mes_alvo)
+
+    d_inicio = dia_inicio if dia_inicio is not None else 1
+    d_fim = dia_fim if dia_fim is not None else ultimo_dia
+
+    def data_str(d):
+        return f"{ano_alvo:04d}-{mes_alvo:02d}-{d:02d}"
+
+    conexao = get_connection()
+    cursor = conexao.cursor()
+
+    semanas = [
+        ("Semana 1", 1, 7),
+        ("Semana 2", 8, 14),
+        ("Semana 3", 15, 21),
+        ("Semana 4", 22, ultimo_dia),
+    ]
+
+    resultado = {}
+
+    for nome_semana, s1, s2 in semanas:
+        if s1 > ultimo_dia:
+            continue
+        s2_real = min(s2, ultimo_dia)
+        if s2_real < d_inicio or s1 > d_fim:
+            continue
+        dt_inicio = data_str(max(s1, d_inicio))
+        dt_fim = data_str(min(s2_real, d_fim) + 1)
+        cursor.execute(
+            """
+            SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
+            FROM boletos
+            WHERE vencimento >= %s AND vencimento < %s AND status = 'Pendente'
+            GROUP BY categoria ORDER BY categoria
+            """,
+            (dt_inicio, dt_fim)
+        )
+        categorias = [{"categoria": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
+        resultado[nome_semana] = categorias
+
+    for offset, nome_mes in [(1, "Mês 2"), (2, "Mês 3")]:
+        mes_prox = mes_alvo + offset
+        ano_prox = ano_alvo
+        while mes_prox > 12:
+            mes_prox -= 12
+            ano_prox += 1
+        _, ultimo_dia_prox = monthrange(ano_prox, mes_prox)
+        inicio_prox = f"{ano_prox:04d}-{mes_prox:02d}-01"
+        fim_prox = f"{ano_prox:04d}-{mes_prox:02d}-{ultimo_dia_prox + 1:02d}" if mes_prox < 12 else f"{ano_prox + 1:04d}-01-01"
+        cursor.execute(
+            """
+            SELECT COALESCE(categoria, 'Sem categoria'), COALESCE(SUM(valor), 0), COUNT(*)
+            FROM boletos
+            WHERE vencimento >= %s AND vencimento < %s AND status = 'Pendente'
+            GROUP BY categoria ORDER BY categoria
+            """,
+            (inicio_prox, fim_prox)
+        )
+        categorias = [{"categoria": l[0], "total": l[1], "quantidade": l[2]} for l in cursor.fetchall()]
+        resultado[nome_mes] = categorias
+
+    conexao.close()
+    return resultado
+
+
+@app.post("/admin/mesclar-categorias")
+def mesclar_categorias(dados: MesclarCategorias, admin: dict = Depends(get_current_admin_user)):
+    conexao = get_connection()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute(
+            "UPDATE boletos SET categoria = %s WHERE categoria = %s",
+            (dados.nome_novo, dados.nome_antigo)
+        )
+        conexao.commit()
+        registrar_auditoria(
+            "mesclar_categorias", "boleto", 0, admin["id"],
+            f"Categoria '{dados.nome_antigo}' mesclada para '{dados.nome_novo}'"
+        )
+        return {"mensagem": "Categorias mescladas com sucesso!"}
+    except Exception as e:
+        conexao.rollback()
+        raise HTTPException(status_code=500, detail=f"Falha ao mesclar categorias: {e}")
+    finally:
+        conexao.close()
+
+
+@app.post("/admin/restaurar-backup")
+def restaurar_backup(payload: BackupPayload, admin: dict = Depends(get_current_admin_user)):
+    payload_bytes = json.dumps(payload.dict()).encode("utf-8")
+    if len(payload_bytes) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Arquivo maior que 5MB não é permitido.")
+
+    conexao = get_connection()
+    try:
+        cursor = conexao.cursor()
+        if payload.boletos:
+            for b in payload.boletos:
+                boleto_dict = b.dict()
+                boleto_dict = {k: v for k, v in boleto_dict.items() if v is not None}
+                campos = list(boleto_dict.keys())
+                valores = list(boleto_dict.values())
+                query = f"INSERT INTO boletos ({', '.join(campos)}) VALUES ({', '.join(['%s'] * len(campos))})"
+                cursor.execute(query, tuple(valores))
+        if payload.fornecedores:
+            for f in payload.fornecedores:
+                forn_dict = f.dict()
+                forn_dict.pop("id", None)
+                forn_dict = {k: v for k, v in forn_dict.items() if v is not None}
+                campos = list(forn_dict.keys())
+                valores = list(forn_dict.values())
+                query = f"INSERT INTO fornecedores ({', '.join(campos)}) VALUES ({', '.join(['%s'] * len(campos))})"
+                cursor.execute(query, tuple(valores))
+        conexao.commit()
+        registrar_auditoria("restaurar_backup", "sistema", 0, admin["id"], "Backup restaurado com sucesso")
+        return {"mensagem": "Backup restaurado com sucesso!"}
+    except Exception as e:
+        conexao.rollback()
+        raise HTTPException(status_code=500, detail=f"Falha ao restaurar backup: {e}")
+    finally:
+        conexao.close()
+
+
+@app.get("/admin/backup-agendado")
+def backup_agendado(admin: dict = Depends(get_current_admin_user)):
+    if not BACKUP_SCHEDULED:
+        return {"mensagem": "Backup automático desativado."}
+
+    if not all([SMTP_SERVER, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO_BACKUP]):
+        raise HTTPException(status_code=500, detail="Configurações de SMTP incompletas.")
+
+    try:
+        agora = datetime.now()
+        data_str = agora.strftime("%Y-%m-%d_%H-%M-%S")
+        nome_arquivo = f"backup_atendcar_{data_str}.zip"
+
+        conexao = get_connection()
+        cursor = conexao.cursor()
+        cursor.execute(
+            "SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em, descricao, metodo_pagamento, banco FROM boletos"
+        )
+        boletos = cursor.fetchall()
+        colunas_boleto = [desc[0] for desc in cursor.description]
+
+        cursor.execute("SELECT id, nome, cnpj, telefone, email, criado_em FROM fornecedores")
+        fornecedores = cursor.fetchall()
+        colunas_forn = [desc[0] for desc in cursor.description]
+        conexao.close()
+
+        csv_boleto = io.StringIO()
+        writer_boleto = csv.writer(csv_boleto)
+        writer_boleto.writerow(colunas_boleto)
+        for row in boletos:
+            writer_boleto.writerow(row)
+        conteudo_boleto = csv_boleto.getvalue()
+
+        csv_forn = io.StringIO()
+        writer_forn = csv.writer(csv_forn)
+        writer_forn.writerow(colunas_forn)
+        for row in fornecedores:
+            writer_forn.writerow(row)
+        conteudo_forn = csv_forn.getvalue()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            caminho_zip = os.path.join(tmpdir, nome_arquivo)
+            with zipfile.ZipFile(caminho_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.writestr("boletos.csv", conteudo_boleto)
+                zipf.writestr("fornecedores.csv", conteudo_forn)
+            with open(caminho_zip, "rb") as f:
+                dados_zip = f.read()
+
+        agora_texto = agora.strftime("%d/%m/%Y")
+        assunto = "📦 [Atend-Car] Backup Semanal Automático - Concluído com Sucesso"
+        corpo = f"""Olá, Administrador!
+O backup semanal do sistema Atend-Car foi realizado com sucesso.
+Em anexo, você encontrará o arquivo contendo todo o histórico de boletos, fornecedores e configurações de metas updated até a data de hoje. Este arquivo serve para a segurança dos seus dados.
+- Data do Backup: {agora_texto}
+- Status do Servidor: Operando normalmente (Plano Gratuito)
+Atenciosamente,
+Robô de Backups Atend-Car"""
+
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = EMAIL_FROM
+            msg["To"] = EMAIL_TO_BACKUP
+            msg["Subject"] = assunto
+            msg["Date"] = formatdate(localtime=True)
+            msg.attach(MIMEText(corpo, "plain", "utf-8"))
+
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(dados_zip)
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f"attachment; filename={nome_arquivo}",
+            )
+            msg.attach(part)
+
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(EMAIL_FROM, EMAIL_TO_BACKUP, msg.as_string())
+            server.quit()
+            email_ok = True
+        except Exception as e:
+            print(f"[ERRO SMTP] Falha ao enviar e-mail de backup: {e}")
+            email_ok = False
+
+        registrar_auditoria("backup_agendado", "sistema", 0, admin["id"], "Backup agendado executado com sucesso")
+        if email_ok:
+            return {"mensagem": "Backup agendado executado e enviado por e-mail com sucesso!"}
+        return {"mensagem": "Backup gerado, mas o envio por e-mail falhou. Verifique as configurações SMTP.", "email_enviado": False}
+    except Exception as e:
+        print(f"[ERRO] Falha no backup agendado: {e}")
+        raise HTTPException(status_code=500, detail=f"Falha no backup agendado: {e}")
