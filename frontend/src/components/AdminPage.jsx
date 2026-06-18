@@ -303,7 +303,8 @@ function AdminPage({ mostrarToast }) {
     try {
       const resp = await apiFetch('/admin/arquivar', { method: 'POST', headers });
       if (resp.ok) {
-        mostrarToast('Espaço liberado com sucesso!');
+        const data = await resp.json();
+        mostrarToast(`${data.arquivados || 0} boletos arquivados!`);
         setConfirmArquivar({ aberto: false, carregando: false });
       } else {
         const d = await resp.json();
@@ -314,6 +315,92 @@ function AdminPage({ mostrarToast }) {
       mostrarToast('Erro ao arquivar', 'erro');
       setConfirmArquivar((prev) => ({ ...prev, carregando: false }));
     }
+  };
+
+  // ── Módulo 5: Meta vs Gasto ──
+  const [metaGasto, setMetaGasto] = useState([]);
+  const [carregandoMeta, setCarregandoMeta] = useState(false);
+
+  const fetchMetaGasto = async () => {
+    setCarregandoMeta(true);
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = agora.getMonth() + 1;
+    try {
+      const [resMetas, resCats] = await Promise.all([
+        apiFetch('/metas/', { headers }),
+        apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}&status=Pago`, { headers }),
+      ]);
+      const metas = resMetas.ok ? await resMetas.json() : [];
+      const gastos = resCats.ok ? await resCats.json() : [];
+      const gastoMap = {};
+      (Array.isArray(gastos) ? gastos : []).forEach((g) => { gastoMap[g.categoria] = g.total; });
+      const combined = (Array.isArray(metas) ? metas : []).map((m) => ({
+        categoria: m.categoria,
+        limite: Number(m.limite_mensal) || 0,
+        gasto: gastoMap[m.categoria] || 0,
+      })).filter((m) => m.limite > 0);
+      setMetaGasto(combined);
+    } catch {}
+    setCarregandoMeta(false);
+  };
+
+  useEffect(() => { if (moduloAberto === 5) fetchMetaGasto(); }, [moduloAberto]);
+
+  // ── Módulo 6: Boletos Excluídos ──
+  const [excluidos, setExcluidos] = useState([]);
+  const [carregandoExcluidos, setCarregandoExcluidos] = useState(false);
+
+  const fetchExcluidos = async () => {
+    setCarregandoExcluidos(true);
+    try {
+      const resp = await apiFetch('/boletos/excluidos', { headers });
+      if (resp.ok) setExcluidos(await resp.json());
+    } catch {}
+    setCarregandoExcluidos(false);
+  };
+
+  useEffect(() => { if (moduloAberto === 6) fetchExcluidos(); }, [moduloAberto]);
+
+  const recuperarBoleto = async (id) => {
+    try {
+      const resp = await apiFetch(`/admin/recuperar-boleto/${id}`, { method: 'POST', headers });
+      if (resp.ok) {
+        mostrarToast('Boleto recuperado com sucesso!');
+        fetchExcluidos();
+      } else {
+        const d = await resp.json();
+        mostrarToast(d.detail || 'Erro', 'erro');
+      }
+    } catch { mostrarToast('Erro ao recuperar', 'erro'); }
+  };
+
+  // ── Módulo 7: Modelos Recorrentes ──
+  const [recorrentes, setRecorrentes] = useState([]);
+  const [carregandoRecorrentes, setCarregandoRecorrentes] = useState(false);
+
+  const fetchRecorrentes = async () => {
+    setCarregandoRecorrentes(true);
+    try {
+      const resp = await apiFetch('/boletos/recorrentes', { headers });
+      if (resp.ok) setRecorrentes(await resp.json());
+    } catch {}
+    setCarregandoRecorrentes(false);
+  };
+
+  useEffect(() => { if (moduloAberto === 7) fetchRecorrentes(); }, [moduloAberto]);
+
+  const deletarRecorrente = async (id) => {
+    try {
+      const resp = await apiFetch(`/boletos/recorrentes/${id}`, { method: 'DELETE', headers });
+      if (resp.ok) {
+        mostrarToast('Modelo excluído!');
+        fetchRecorrentes();
+      } else {
+        const d = await resp.json();
+        mostrarToast(d.detail || 'Erro', 'erro');
+      }
+    } catch { mostrarToast('Erro ao excluir', 'erro'); }
   };
 
   return (
@@ -603,6 +690,120 @@ function AdminPage({ mostrarToast }) {
           onCancelar={() => setConfirmArquivar({ aberto: false, carregando: false })}
           carregando={confirmArquivar.carregando}
         />
+      </AccordionSection>
+
+      {/* ────────── MÓDULO 5 ────────── */}
+      <AccordionSection indice={5} icone="💰" titulo="Meta vs Gasto" descricao="Comparativo do mês atual por categoria">
+        <div className="mt-1 space-y-2">
+          {carregandoMeta ? (
+            <p className="text-sm text-slate-500 italic py-2">Carregando...</p>
+          ) : metaGasto.length === 0 ? (
+            <p className="text-sm text-slate-500 italic py-2">Nenhuma meta definida para este mês.</p>
+          ) : (
+            metaGasto.map((item) => {
+              const pct = item.limite > 0 ? Math.min((item.gasto / item.limite) * 100, 100) : 0;
+              const estouro = item.gasto > item.limite;
+              return (
+                <div key={item.categoria} className="bg-slate-900/20 rounded-lg px-4 py-3 border border-atend-border/50">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-white">{item.categoria}</span>
+                    <span className={`text-xs font-semibold ${estouro ? 'text-rose-400' : 'text-atend-verde'}`}>
+                      R$ {item.gasto.toFixed(2)} / R$ {item.limite.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-500 ${estouro ? 'bg-rose-500' : 'bg-atend-verde'}`}
+                      style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </AccordionSection>
+
+      {/* ────────── MÓDULO 6 ────────── */}
+      <AccordionSection indice={6} icone="🗑" titulo="Boletos Excluídos" descricao="Recuperar boletos deletados">
+        <div className="mt-1 space-y-2">
+          {carregandoExcluidos ? (
+            <p className="text-sm text-slate-500 italic py-2">Carregando...</p>
+          ) : excluidos.length === 0 ? (
+            <p className="text-sm text-slate-500 italic py-2">Nenhum boleto excluído encontrado.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                    <th className="px-3 py-3">ID</th>
+                    <th className="px-3 py-3">Descrição</th>
+                    <th className="px-3 py-3">Valor</th>
+                    <th className="px-3 py-3">Vencimento</th>
+                    <th className="px-3 py-3 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
+                  {excluidos.map((b) => (
+                    <tr key={b.id} className="hover:bg-slate-900/20 transition-colors">
+                      <td className="px-3 py-3 text-slate-500">{b.id}</td>
+                      <td className="px-3 py-3 font-medium text-white">{b.descricao || '—'}</td>
+                      <td className="px-3 py-3 text-slate-400">R$ {Number(b.valor || 0).toFixed(2)}</td>
+                      <td className="px-3 py-3 text-slate-400">{b.vencimento || '—'}</td>
+                      <td className="px-3 py-3 text-right">
+                        <button onClick={() => recuperarBoleto(b.id)}
+                          className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all hover:bg-atend-verde/10">
+                          Recuperar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </AccordionSection>
+
+      {/* ────────── MÓDULO 7 ────────── */}
+      <AccordionSection indice={7} icone="🔄" titulo="Modelos Recorrentes" descricao="Gerenciar boletos recorrentes">
+        <div className="mt-1 space-y-2">
+          {carregandoRecorrentes ? (
+            <p className="text-sm text-slate-500 italic py-2">Carregando...</p>
+          ) : recorrentes.length === 0 ? (
+            <p className="text-sm text-slate-500 italic py-2">Nenhum modelo recorrente encontrado.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                    <th className="px-3 py-3">ID</th>
+                    <th className="px-3 py-3">Descrição</th>
+                    <th className="px-3 py-3">Valor</th>
+                    <th className="px-3 py-3">Categoria</th>
+                    <th className="px-3 py-3">Dia</th>
+                    <th className="px-3 py-3 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
+                  {recorrentes.map((r) => (
+                    <tr key={r.id} className="hover:bg-slate-900/20 transition-colors">
+                      <td className="px-3 py-3 text-slate-500">{r.id}</td>
+                      <td className="px-3 py-3 font-medium text-white">{r.descricao || '—'}</td>
+                      <td className="px-3 py-3 text-slate-400">R$ {Number(r.valor || 0).toFixed(2)}</td>
+                      <td className="px-3 py-3 text-slate-400">{r.categoria || '—'}</td>
+                      <td className="px-3 py-3 text-slate-400">{r.dia_vencimento || '—'}</td>
+                      <td className="px-3 py-3 text-right">
+                        <button onClick={() => deletarRecorrente(r.id)}
+                          className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all hover:bg-rose-500/10">
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </AccordionSection>
     </div>
   );

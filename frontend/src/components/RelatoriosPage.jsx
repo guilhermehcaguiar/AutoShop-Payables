@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../api.js';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 import { SkeletonResumo, SkeletonGrafico } from './Skeleton';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
@@ -228,10 +230,146 @@ function RelatoriosPage() {
               )}
             </div>
           </div>
+
+          {/* ── DRE (Demonstração do Resultado) ── */}
+          <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white">📋 Demonstrativo do Resultado (DRE)</h3>
+              <button onClick={exportarPDF}
+                className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all">
+                Exportar PDF
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                    <th className="px-4 py-3">Conta</th>
+                    <th className="px-4 py-3 text-right">Valor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-atend-border/50 text-sm">
+                  <tr className="bg-slate-900/10">
+                    <td className="px-4 py-3 font-semibold text-white">Receita Líquida (Total Geral)</td>
+                    <td className="px-4 py-3 text-right font-semibold text-white">
+                      {mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3 pl-8 text-slate-300">Total Pago</td>
+                    <td className="px-4 py-3 text-right text-atend-verde font-medium">
+                      {mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3 pl-8 text-slate-300">Total Pendente</td>
+                    <td className="px-4 py-3 text-right text-amber-400 font-medium">
+                      {mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}
+                    </td>
+                  </tr>
+                  <tr className="border-t-2 border-atend-border/80">
+                    <td className="px-4 py-3 font-semibold text-white">Boletos no Mês</td>
+                    <td className="px-4 py-3 text-right font-semibold text-white">{mensal?.total_boletos || 0}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {porCategoria.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Por Categoria</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                        <th className="px-4 py-2">Categoria</th>
+                        <th className="px-4 py-2 text-right">Valor</th>
+                        <th className="px-4 py-2 text-right">Qtd</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-atend-border/50 text-sm">
+                      {porCategoria.map((c, i) => (
+                        <tr key={i} className="hover:bg-slate-900/20 transition-colors">
+                          <td className="px-4 py-2 text-slate-300">{c.categoria}</td>
+                          <td className="px-4 py-2 text-right text-white font-medium">{formatar(c.total)}</td>
+                          <td className="px-4 py-2 text-right text-slate-400">{c.quantidade}x</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
   );
+}
+
+function exportarPDF() {
+  const token = localStorage.getItem('token');
+  const ano = new Date().getFullYear();
+  const mes = new Date().getMonth() + 1;
+  const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase());
+
+  apiFetch(`/relatorio/mensal?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } })
+    .then((r) => r.ok ? r.json() : null)
+    .then((mensal) => {
+      apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        .then((r) => r.ok ? r.json() : [])
+        .then((cats) => {
+          const doc = new jsPDF();
+          const paginas = doc.internal.getNumberOfPages();
+          const largura = doc.internal.pageSize.getWidth();
+
+          doc.setFontSize(18);
+          doc.setTextColor(46, 204, 113);
+          doc.text('AutoShop Payables', largura / 2, 20, { align: 'center' });
+
+          doc.setFontSize(14);
+          doc.setTextColor(15, 23, 42);
+          doc.text(`DRE - ${nomeMes} ${ano}`, largura / 2, 30, { align: 'center' });
+
+          const formatar = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+          const totalGeral = mensal ? mensal.total_pago + mensal.total_pendente : 0;
+          const totalPago = mensal ? mensal.total_pago : 0;
+          const totalPendente = mensal ? mensal.total_pendente : 0;
+          const totalBoletos = mensal ? mensal.total_boletos : 0;
+
+          doc.autoTable({
+            startY: 40,
+            head: [['Conta', 'Valor']],
+            body: [
+              ['Receita Líquida (Total Geral)', formatar(totalGeral)],
+              ['  Total Pago', formatar(totalPago)],
+              ['  Total Pendente', formatar(totalPendente)],
+              ['Boletos no Mês', String(totalBoletos)],
+            ],
+            headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
+            bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
+            alternateRowStyles: { fillColor: [30, 41, 59] },
+            styles: { fillColor: [15, 23, 42], halign: 'left' },
+            columnStyles: { 1: { halign: 'right' } },
+          });
+
+          if (Array.isArray(cats) && cats.length > 0) {
+            const catBody = cats.map((c) => [c.categoria, formatar(c.total), String(c.quantidade)]);
+            doc.autoTable({
+              startY: doc.lastAutoTable.finalY + 10,
+              head: [['Categoria', 'Valor', 'Qtd']],
+              body: catBody,
+              headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
+              bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
+              alternateRowStyles: { fillColor: [30, 41, 59] },
+              styles: { fillColor: [15, 23, 42], halign: 'left' },
+              columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
+            });
+          }
+
+          doc.save(`DRE-${nomeMes}-${ano}.pdf`);
+        });
+    });
 }
 
 export default RelatoriosPage;
