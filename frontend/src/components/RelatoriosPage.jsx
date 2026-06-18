@@ -112,7 +112,7 @@ function RelatoriosPage({ mostrarToast }) {
 
       let doc;
       try {
-        doc = new jsPDF();
+        doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       } catch (e) {
         mostrarToast?.('Erro ao criar PDF: ' + e.message, 'erro');
         setExportando(false);
@@ -120,90 +120,211 @@ function RelatoriosPage({ mostrarToast }) {
       }
 
       const pw = doc.internal.pageSize.getWidth();
-      const ml = 14, cw = pw - ml * 2;
+      const ph = doc.internal.pageSize.getHeight();
+      const ml = 14, mr = 14, cw = pw - ml - mr;
       const fmt = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-      let y = 20;
+      const BG = '#0f1117', CARD = '#1a1d27', BORDER = '#2a2d3a', GREEN = '#2ecc71';
+      let y = 0;
 
       try {
-        doc.setFontSize(16);
+        const pageBg = () => {
+          doc.setFillColor(15, 17, 23);
+          doc.rect(0, 0, pw, ph, 'F');
+        };
+        const card = (x, w, h, yp) => {
+          doc.setFillColor(26, 29, 39);
+          doc.setDrawColor(42, 45, 58);
+          doc.setLineWidth(0.3);
+          doc.roundedRect(x, yp, w, h, 2, 2, 'FD');
+        };
+        const sectionTitle = (text, yp) => {
+          doc.setFillColor(46, 204, 113);
+          doc.rect(ml, yp, 3, 10, 'F');
+          doc.setTextColor(46, 204, 113);
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'bold');
+          doc.text(text.toUpperCase(), ml + 7, yp + 7);
+        };
+
+        pageBg();
+
+        y = 15;
+        card(ml, cw, 80, y);
+
+        const centerX = pw / 2;
+        const titleY = y + 16;
+        const sonicSize = 22;
+
+        const fullTitle = 'ATEND-CAR';
+        await document.fonts.ready;
+        const canvas = document.createElement('canvas');
+        const size = 300;
+        canvas.width = size;
+        canvas.height = Math.round(size * 0.35);
+        const ctx = canvas.getContext('2d');
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        const sonicPx = 72;
+        ctx.font = `${sonicPx}px 'Sonic Extra Bold', 'Segoe UI', sans-serif`;
+        const metrics = ctx.measureText(fullTitle);
+        const imgW = metrics.width;
+        const imgH = sonicPx * 1.2;
+        canvas.width = Math.ceil(imgW + 20);
+        canvas.height = Math.ceil(imgH + 10);
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.font = `${sonicPx}px 'Sonic Extra Bold', 'Segoe UI', sans-serif`;
+        ctx.strokeStyle = '#0f1117';
+        ctx.lineWidth = sonicPx * 0.08;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(fullTitle, cx, cy);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(fullTitle, cx, cy);
+        const imgData = canvas.toDataURL('image/png');
+        const pdfImgH = 14;
+        const pdfImgW = (canvas.width / canvas.height) * pdfImgH;
+        const titleX = centerX - pdfImgW / 2;
+        doc.addImage(imgData, 'PNG', titleX, titleY - pdfImgH / 2, pdfImgW, pdfImgH);
+
+        doc.setFont('helvetica', 'normal');
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(148, 163, 184);
+        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 9, { align: 'center' });
+
+        doc.setDrawColor(46, 204, 113);
+        doc.setLineWidth(0.5);
+        doc.line(ml + 5, titleY + 14, ml + cw - 5, titleY + 14);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
         doc.setTextColor(46, 204, 113);
-        doc.text('AutoShop Payables', pw / 2, y, { align: 'center' });
-        y += 9;
+        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 22, { align: 'center' });
 
-        doc.setFontSize(12);
-        doc.setTextColor(15, 23, 42);
-        doc.text(`DRE - ${nomeMes} ${ano}`, pw / 2, y, { align: 'center' });
-        y += 10;
+        y = titleY + 26;
+        const periodoStr = `${nomeMes} ${ano}`;
 
-        const rows = [
-          ['Conta', 'Valor', true, true],
-          ['Receita Líquida (Total Geral)', fmt(m.total_pago + m.total_pendente), false, true],
-          ['  Total Pago', fmt(m.total_pago), true, false],
-          ['  Total Pendente', fmt(m.total_pendente), false, false],
-          ['---', '---', false, false],
-          ['Boletos no Mês', String(m.total_boletos || 0), true, true],
-        ];
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        const dataEmissao = new Date().toLocaleDateString('pt-BR');
+        doc.text(`Período: ${periodoStr}`, ml + cw, y, { align: 'right' });
 
-        rows.forEach(([label, value, isAlt, isBold]) => {
-          if (label === '---') {
-            doc.setDrawColor(46, 204, 113);
-            doc.setLineWidth(0.3);
-            doc.line(ml, y, ml + cw, y);
-            y += 3;
-            return;
-          }
-          const h = 7;
-          doc.setFillColor(isAlt ? 22 : 15, isAlt ? 30 : 23, isAlt ? 40 : 42);
-          doc.rect(ml, y, cw, h, 'F');
-          doc.setTextColor(isBold ? 255 : 200, isBold ? 255 : 200, isBold ? 255 : 180);
-          doc.setFontSize(8);
-          doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-          doc.text(label, ml + 2, y + 5);
-          doc.text(value, ml + cw - 2, y + 5, { align: 'right' });
-          y += h;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Emissão: ${dataEmissao}`, ml, y);
+        y += 3;
+
+        y += 3;
+        sectionTitle('Demonstrativo do Resultado', y);
+        y += 15;
+
+        card(ml, cw, 45, y);
+        const ty = y + 3;
+
+        const headerLabels = ['Descrição', 'Valor'];
+        const headerWs = [cw * 0.7, cw * 0.3];
+        doc.setFillColor(46, 204, 113);
+        doc.rect(ml + 4, ty, cw - 8, 6, 'F');
+        doc.setTextColor(10, 10, 10);
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'bold');
+        let hx = ml + 6;
+        headerLabels.forEach((l, i) => {
+          doc.text(l, hx + (i === 1 ? headerWs[i] - 2 : 0), ty + 4, i === 1 ? { align: 'right' } : undefined);
+          if (i === 0) hx += headerWs[i];
         });
 
+        let ry = ty + 6;
+        const dreRows = [
+          ['Receita Líquida (Total Geral)', fmt(m.total_pago + m.total_pendente), true, true],
+          ['  Total Pago', fmt(m.total_pago), false, false],
+          ['  Total Pendente', fmt(m.total_pendente), true, false],
+        ];
+        dreRows.forEach(([label, value, isAlt, isBold]) => {
+          doc.setFillColor(isAlt ? 26 : 22, isAlt ? 29 : 26, isAlt ? 39 : 36);
+          doc.rect(ml + 4, ry, cw - 8, 6, 'F');
+          doc.setTextColor(isBold ? 255 : 200, isBold ? 255 : 200, isBold ? 180 : 180);
+          doc.setFontSize(6);
+          doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+          doc.text(label, ml + 6, ry + 4);
+          doc.text(value, ml + cw - 6, ry + 4, { align: 'right' });
+          ry += 6;
+        });
+
+        doc.setDrawColor(46, 204, 113);
+        doc.setLineWidth(0.3);
+        doc.line(ml + 4, ry, ml + cw - 4, ry);
+        ry += 2;
+
+        doc.setFillColor(26, 29, 39);
+        doc.rect(ml + 4, ry, cw - 8, 6, 'F');
+        doc.setTextColor(46, 204, 113);
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Boletos no Mês', ml + 6, ry + 4);
+        doc.text(String(m.total_boletos || 0), ml + cw - 6, ry + 4, { align: 'right' });
+        ry += 8;
+
+        y = ry + 3;
+
         if (Array.isArray(cats) && cats.length > 0) {
-          y += 6;
-          doc.setFontSize(10);
-          doc.setTextColor(46, 204, 113);
-          doc.text('Por Categoria', ml, y);
-          y += 7;
+          sectionTitle('Distribuição por Categoria', y);
+          y += 15;
 
-          const catCols = [
-            { label: 'Categoria', w: cw * 0.6 },
-            { label: 'Valor', w: cw * 0.25 },
-            { label: 'Qtd', w: cw * 0.15 },
-          ];
+          const catRows = Math.ceil(cats.length);
+          const catH = catRows * 6 + 12;
+          card(ml, cw, catH, y);
 
+          const ct = y + 3;
           doc.setFillColor(46, 204, 113);
-          doc.rect(ml, y, cw, 7, 'F');
+          doc.rect(ml + 4, ct, cw - 8, 6, 'F');
           doc.setTextColor(10, 10, 10);
-          doc.setFontSize(8);
+          doc.setFontSize(6);
           doc.setFont('helvetica', 'bold');
-          let xCat = ml;
-          catCols.forEach(({ label, w }) => {
-            doc.text(label, xCat + 2, y + 5);
-            xCat += w;
+          const catHeaders = ['Categoria', 'Valor', 'Qtd'];
+          const catWs = [cw * 0.55, cw * 0.3, cw * 0.15];
+          let chx = ml + 6;
+          catHeaders.forEach((l, i) => {
+            const isLast = i === catHeaders.length - 1;
+            doc.text(l, isLast ? chx + catWs[i] - 2 : chx, ct + 4, isLast ? { align: 'right' } : undefined);
+            chx += catWs[i];
           });
-          y += 7;
 
+          let cry = ct + 6;
           cats.forEach((c, i) => {
-            const vals = [c.categoria, fmt(c.total), String(c.quantidade)];
-            doc.setFillColor(i % 2 === 0 ? 15 : 22, i % 2 === 0 ? 23 : 30, i % 2 === 0 ? 42 : 40);
-            doc.rect(ml, y, cw, 7, 'F');
+            doc.setFillColor(i % 2 === 0 ? 26 : 22, i % 2 === 0 ? 29 : 26, i % 2 === 0 ? 39 : 36);
+            doc.rect(ml + 4, cry, cw - 8, 6, 'F');
             doc.setTextColor(200, 200, 180);
-            doc.setFontSize(8);
+            doc.setFontSize(6);
             doc.setFont('helvetica', 'normal');
-            let xCat2 = ml;
+            let cx2 = ml + 6;
+            const vals = [c.categoria, fmt(c.total), String(c.quantidade)];
             vals.forEach((val, j) => {
               const isLast = j === vals.length - 1;
-              doc.text(val, isLast ? xCat2 + catCols[j].w - 2 : xCat2 + 2, y + 5, isLast ? { align: 'right' } : undefined);
-              xCat2 += catCols[j].w;
+              doc.text(val, isLast ? cx2 + catWs[j] - 2 : cx2, cry + 4, isLast ? { align: 'right' } : undefined);
+              cx2 += catWs[j];
             });
-            y += 7;
+            cry += 6;
           });
+          y = cry + 8;
         }
+
+        y += 5;
+        doc.setDrawColor(42, 45, 58);
+        doc.setLineWidth(0.3);
+        doc.line(ml, y, ml + cw, y);
+        y += 3;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6);
+        doc.setTextColor(100, 116, 139);
+        doc.text('AutoShop Payables © 2026 — Todos os direitos reservados.', centerX, y, { align: 'center' });
 
         doc.save(`DRE-${nomeMes}-${ano}.pdf`);
         mostrarToast?.('PDF exportado com sucesso!');
