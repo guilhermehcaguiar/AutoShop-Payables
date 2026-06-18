@@ -891,6 +891,48 @@ def salvar_meta(dados: MetaCreate, usuario: dict = Depends(get_usuario_logado)):
     finally:
         conexao.close()
 
+@app.put("/metas/{meta_id}")
+def atualizar_meta(meta_id: int, dados: MetaCreate, usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute(
+            "UPDATE metas_categorias SET categoria = %s, limite_mensal = %s WHERE id = %s RETURNING id, categoria, limite_mensal",
+            (dados.categoria.strip(), dados.limite_mensal, meta_id)
+        )
+        meta = cursor.fetchone()
+        if not meta:
+            conexao.close()
+            raise HTTPException(status_code=404, detail="Meta não encontrada")
+        conexao.commit()
+        return {"id": meta[0], "categoria": meta[1], "limite_mensal": float(meta[2])}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conexao.rollback()
+        raise HTTPException(status_code=400, detail=f"Erro ao atualizar meta: {e}")
+    finally:
+        conexao.close()
+
+@app.delete("/metas/{meta_id}")
+def deletar_meta(meta_id: int, usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute("DELETE FROM metas_categorias WHERE id = %s RETURNING id", (meta_id,))
+        if not cursor.fetchone():
+            conexao.close()
+            raise HTTPException(status_code=404, detail="Meta não encontrada")
+        conexao.commit()
+        return {"mensagem": "Meta excluída com sucesso"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conexao.rollback()
+        raise HTTPException(status_code=400, detail=f"Erro ao excluir meta: {e}")
+    finally:
+        conexao.close()
+
 @app.post("/admin/mesclar-categorias")
 def mesclar_categorias(dados: MesclarCategorias, admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()

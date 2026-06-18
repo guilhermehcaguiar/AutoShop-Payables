@@ -268,7 +268,6 @@ function RelatoriosPage({ mostrarToast }) {
 
         const headerRowH = 8;
         const dataRowH = 8;
-        const pct = (v) => totalGeral > 0 ? ` (${((v / totalGeral) * 100).toFixed(1)}%)` : '';
 
         const dreContentH = headerRowH + 3 * dataRowH + 2 + dataRowH + 6;
         card(ml, cw, dreContentH, y);
@@ -276,10 +275,6 @@ function RelatoriosPage({ mostrarToast }) {
 
         const innerX = ml + 4;
         const innerW = cw - 8;
-        const valColW = innerW * 0.45;
-        const pctColW = innerW * 0.18;
-        const valX = innerX + innerW - valColW;
-        const pctX = valX - 2;
         const colPad = 2;
         doc.setFillColor(46, 204, 113);
         doc.rect(innerX, ty, innerW, headerRowH, 'F');
@@ -287,27 +282,22 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.text('Descrição', innerX + colPad, ty + 5);
-        doc.text('Valor', valX + valColW - colPad, ty + 5, { align: 'right' });
-        doc.text('%', pctX - colPad, ty + 5, { align: 'right' });
+        doc.text('Valor', innerX + innerW - colPad, ty + 5, { align: 'right' });
 
         let ry = ty + headerRowH;
         const dreRows = [
-          ['Receita Líquida (Total Geral)', fmt(totalGeral), pct(totalGeral), true, true],
-          ['  Total Pago', fmt(m.total_pago || 0), pct(m.total_pago || 0), false, false],
-          ['  Total Pendente', fmt(m.total_pendente || 0), pct(m.total_pendente || 0), true, false],
+          ['Receita Líquida (Total Geral)', fmt(totalGeral), true, true],
+          ['  Total Pago', fmt(m.total_pago || 0), false, false],
+          ['  Total Pendente', fmt(m.total_pendente || 0), true, false],
         ];
-        dreRows.forEach(([label, value, pctStr, isAlt, isBold]) => {
+        dreRows.forEach(([label, value, isAlt, isBold]) => {
           doc.setFillColor(isAlt ? 26 : 22, isAlt ? 29 : 26, isAlt ? 39 : 36);
           doc.rect(innerX, ry, innerW, dataRowH, 'F');
           doc.setTextColor(isBold ? 255 : 220, isBold ? 255 : 220, isBold ? 255 : 220);
           doc.setFontSize(8);
           doc.setFont('helvetica', isBold ? 'bold' : 'normal');
           doc.text(label, innerX + colPad, ry + 5.5);
-          doc.text(value, valX + valColW - colPad, ry + 5.5, { align: 'right' });
-          doc.setTextColor(148, 163, 184);
-          doc.setFontSize(7);
-          doc.text(pctStr, pctX - colPad, ry + 5.5, { align: 'right' });
-          doc.setFontSize(8);
+          doc.text(value, innerX + innerW - colPad, ry + 5.5, { align: 'right' });
           ry += dataRowH;
         });
 

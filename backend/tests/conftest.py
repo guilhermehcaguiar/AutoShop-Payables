@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 
 class _TestConnection:
-    """Wraps a psycopg2 connection making commit/close no-ops.
+    """Wraps a psycopg2 connection making commit/rollback/close no-ops.
 
     Every test runs inside a single transaction that is rolled back at
     the end, so no data ever persists to the database.
@@ -29,7 +29,7 @@ class _TestConnection:
         object.__setattr__(self, '_conn', conn)
 
     def __getattr__(self, name):
-        if name in ('commit', 'close'):
+        if name in ('commit', 'rollback', 'close'):
             return lambda *a, **kw: None
         return getattr(object.__getattribute__(self, '_conn'), name)
 

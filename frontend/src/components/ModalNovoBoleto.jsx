@@ -8,11 +8,8 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [codigoBarras, setCodigoBarras] = useState('');
   const [categoria, setCategoria] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [metodoPagamento, setMetodoPagamento] = useState('');
-  const [banco, setBanco] = useState('');
   const [categorias, setCategorias] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
-  const [bancos, setBancos] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [mostrarDropdownFornecedor, setMostrarDropdownFornecedor] = useState(false);
@@ -33,12 +30,10 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       setCodigoBarras(boletoEditando.codigo_barras || '');
       setCategoria(boletoEditando.categoria || '');
       setDescricao(boletoEditando.descricao || '');
-      setMetodoPagamento(boletoEditando.metodo_pagamento || '');
-      setBanco(boletoEditando.banco || '');
     } else {
       setFornecedor(''); setValor(''); setVencimento('');
       setCodigoBarras(''); setCategoria('');
-      setDescricao(''); setMetodoPagamento(''); setBanco('');
+      setDescricao('');
     }
     setRecorrente(false);
     setNMeses(3);
@@ -49,8 +44,6 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       .then((r) => r.ok && r.json()).then(setCategorias).catch(() => {});
     apiFetch('/fornecedores/', { headers })
       .then((r) => r.ok && r.json()).then(setFornecedores).catch(() => {});
-    apiFetch('/boletos/bancos-utilizados', { headers })
-      .then((r) => r.ok && r.json()).then(setBancos).catch(() => {});
   }, [aberto, boletoEditando]);
 
   const adicionarMeses = (data, meses) => {
@@ -97,8 +90,6 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       codigo_barras: codigoBarras || null,
       categoria: categoria || null,
       descricao: descricao || null,
-      metodo_pagamento: metodoPagamento || null,
-      banco: banco || null,
     };
     try {
       if (editando) {
@@ -206,31 +197,6 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
               placeholder="Descrição do boleto"
               rows="2"
               className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors resize-none" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Método Pagamento <span className="text-slate-600 normal-case">(opcional)</span>
-            </label>
-            <select value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors">
-              <option value=""></option>
-              <option value="Pix">Pix</option>
-              <option value="Transferência">Transferência</option>
-              <option value="Cartão">Cartão</option>
-              <option value="Dinheiro">Dinheiro</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Banco <span className="text-slate-600 normal-case">(opcional)</span>
-            </label>
-            <input type="text" value={banco} onChange={(e) => setBanco(e.target.value)}
-              placeholder="Ex: Itaú, Bradesco, Santander"
-              list="lista-bancos"
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" />
-            <datalist id="lista-bancos">
-              {bancos.map((b, i) => (<option key={i} value={b} />))}
-            </datalist>
           </div>
           {!editando && (
             <div className="flex items-center gap-3 pt-1">
