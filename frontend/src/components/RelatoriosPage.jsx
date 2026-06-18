@@ -318,7 +318,7 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
-        doc.text('AutoShop Payables © 2026 — Todos os direitos reservados.', centerX, y, { align: 'center' });
+        doc.text('Atend-Car © 2026 — Todos os direitos reservados.', centerX, y, { align: 'center' });
 
         doc.save(`DRE-${nomeMes}-${ano}.pdf`);
         mostrarToast?.('PDF exportado com sucesso!');
