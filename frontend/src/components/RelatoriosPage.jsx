@@ -97,21 +97,21 @@ function RelatoriosPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl relative overflow-hidden">
+            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent" />
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Pago</p>
-              <p className="text-2xl font-extrabold text-white">{mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}</p>
+              <p className="text-2xl font-extrabold tracking-tight text-white group-hover:text-atend-verde group-active:text-atend-verde transition-colors">{mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}</p>
               <p className="text-xs text-slate-500 mt-1">{mensal?.total_boletos || 0} boletos no mês</p>
             </div>
-            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl relative overflow-hidden">
+            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Pendente</p>
-              <p className="text-2xl font-extrabold text-white">{mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}</p>
+              <p className="text-2xl font-extrabold tracking-tight text-white group-hover:text-amber-400 group-active:text-amber-400 transition-colors">{mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}</p>
             </div>
-            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl relative overflow-hidden">
+            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-sky-500/40 to-transparent" />
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Geral</p>
-              <p className="text-2xl font-extrabold text-white">{mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}</p>
+              <p className="text-2xl font-extrabold tracking-tight text-white group-hover:text-sky-400 group-active:text-sky-400 transition-colors">{mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}</p>
             </div>
           </div>
 

@@ -771,31 +771,31 @@ function App() {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
                 <div onClick={() => setFiltroStatus('pagos')}
-                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
                   <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent"></div>
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
                     <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-atend-verde/10 text-atend-verde border border-atend-verde/20">Mês</span>
                   </div>
-                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-atend-verde transition-colors">{formatarMoeda(totalPago)}</span>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-atend-verde group-active:text-atend-verde transition-colors">{formatarMoeda(totalPago)}</span>
                 </div>
                 <div onClick={() => setFiltroStatus('pendentes')}
-                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
                   <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
                     <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20">Aberto</span>
                   </div>
-                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-amber-400 transition-colors">{formatarMoeda(totalAPagar)}</span>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-amber-400 group-active:text-amber-400 transition-colors">{formatarMoeda(totalAPagar)}</span>
                 </div>
                 <div onClick={() => setFiltroStatus('vencendo')}
-                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
                   <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
                     <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/20">Atenção</span>
                   </div>
-                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-rose-400 transition-colors">{formatarMoeda(vencendoHoje)}</span>
+                  <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white group-hover:text-rose-400 group-active:text-rose-400 transition-colors">{formatarMoeda(vencendoHoje)}</span>
                 </div>
               </div>
 

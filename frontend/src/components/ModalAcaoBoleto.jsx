@@ -9,7 +9,7 @@ function ModalAcaoBoleto({ aberto, boleto, onFechar, onEditar, onPagar, onDeleta
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="fixed inset-0 bg-black/60" onClick={onFechar} />
-      <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10">
+      <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 max-h-[85vh] overflow-y-auto">
         <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
         <div className="flex justify-between items-center mb-6 mt-1">
           <h2 className="text-lg font-bold text-white">Detalhes do Boleto</h2>
