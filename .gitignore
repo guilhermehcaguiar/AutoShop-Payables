@@ -24,6 +24,7 @@ backend/.venv/
 backend/.env
 backend/*.db
 backend/*.sqlite3
+backend/.pytest_cache/
 **/__pycache__/
 *.pyc
 
