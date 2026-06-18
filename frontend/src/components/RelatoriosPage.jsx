@@ -14,20 +14,27 @@ function RelatoriosPage() {
   const [porFornecedor, setPorFornecedor] = useState([]);
   const [porCategoria, setPorCategoria] = useState([]);
   const [projecao, setProjecao] = useState(null);
+  const [filtroStatusRel, setFiltroStatusRel] = useState('');
   const [carregando, setCarregando] = useState(true);
 
   const fetchRelatorio = async () => {
     setCarregando(true);
     const token = localStorage.getItem('token');
-    const params = new URLSearchParams({ ano, mes });
-    if (diaInicio) params.set('dia_inicio', diaInicio);
-    if (diaFim) params.set('dia_fim', diaFim);
+    const paramsBase = new URLSearchParams({ ano, mes });
+    if (diaInicio) paramsBase.set('dia_inicio', diaInicio);
+    if (diaFim) paramsBase.set('dia_fim', diaFim);
+    const paramsF = new URLSearchParams(paramsBase);
+    const paramsC = new URLSearchParams(paramsBase);
+    if (filtroStatusRel) {
+      paramsF.set('status', filtroStatusRel);
+      paramsC.set('status', filtroStatusRel);
+    }
     try {
       const [respM, respF, respC, respP] = await Promise.all([
-        apiFetch(`/relatorio/mensal?${params}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/relatorio/fornecedores?${params}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/relatorio/categorias?${params}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/boletos/projecao-fluxo?${params}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/mensal?${paramsBase}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/fornecedores?${paramsF}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/categorias?${paramsC}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/boletos/projecao-fluxo?${paramsBase}`, { headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
       if (respM.ok) setMensal(await respM.json());
       if (respF.ok) setPorFornecedor(await respF.json());
@@ -36,7 +43,7 @@ function RelatoriosPage() {
     } catch {} finally { setCarregando(false); }
   };
 
-  useEffect(() => { fetchRelatorio(); }, [ano, mes, diaInicio, diaFim]);
+  useEffect(() => { fetchRelatorio(); }, [ano, mes, diaInicio, diaFim, filtroStatusRel]);
 
   const formatar = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
   const maxTotal = Math.max(...porFornecedor.map((f) => f.total), 1);
@@ -97,21 +104,24 @@ function RelatoriosPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent" />
+            <div onClick={() => setFiltroStatusRel(filtroStatusRel === 'Pago' ? '' : 'Pago')}
+              className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
+              <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent ${filtroStatusRel === 'Pago' ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Pago</p>
-              <p className="text-2xl font-extrabold tracking-tight text-white group-hover:text-atend-verde group-active:text-atend-verde transition-colors">{mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}</p>
+              <p className={`text-2xl font-extrabold tracking-tight ${filtroStatusRel === 'Pago' ? 'text-atend-verde' : 'text-white group-hover:text-atend-verde group-active:text-atend-verde'} transition-colors`}>{mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}</p>
               <p className="text-xs text-slate-500 mt-1">{mensal?.total_boletos || 0} boletos no mês</p>
             </div>
-            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+            <div onClick={() => setFiltroStatusRel(filtroStatusRel === 'Pendente' ? '' : 'Pendente')}
+              className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
+              <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent ${filtroStatusRel === 'Pendente' ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Pendente</p>
-              <p className="text-2xl font-extrabold tracking-tight text-white group-hover:text-amber-400 group-active:text-amber-400 transition-colors">{mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}</p>
+              <p className={`text-2xl font-extrabold tracking-tight ${filtroStatusRel === 'Pendente' ? 'text-amber-400' : 'text-white group-hover:text-amber-400 group-active:text-amber-400'} transition-colors`}>{mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}</p>
             </div>
-            <div className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-sky-500/40 to-transparent" />
+            <div onClick={() => setFiltroStatusRel('')}
+              className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
+              <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-sky-500/40 to-transparent ${!filtroStatusRel ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Geral</p>
-              <p className="text-2xl font-extrabold tracking-tight text-white group-hover:text-sky-400 group-active:text-sky-400 transition-colors">{mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}</p>
+              <p className={`text-2xl font-extrabold tracking-tight ${!filtroStatusRel ? 'text-sky-400' : 'text-white group-hover:text-sky-400 group-active:text-sky-400'} transition-colors`}>{mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}</p>
             </div>
           </div>
 

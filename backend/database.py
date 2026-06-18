@@ -90,6 +90,12 @@ class MetaCategoria(Base):
     limite_mensal = Column(Numeric(12, 2), nullable=False)
 
 
+class Config(Base):
+    __tablename__ = 'config'
+    chave = Column(String, primary_key=True)
+    valor = Column(String, nullable=False)
+
+
 def get_connection():
     return psycopg2.connect(DATABASE_URL)
 
@@ -138,6 +144,20 @@ def migrar():
         )
         """
     )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS config (
+            chave VARCHAR(255) PRIMARY KEY,
+            valor VARCHAR(255) NOT NULL
+        )
+        """
+    )
+
+    cursor.execute("SELECT COUNT(*) FROM config WHERE chave = 'backup_auto'")
+    if cursor.fetchone()[0] == 0:
+        valor_inicial = "true" if os.getenv("BACKUP_SCHEDULED", "false").lower() == "true" else "false"
+        cursor.execute("INSERT INTO config (chave, valor) VALUES ('backup_auto', %s)", (valor_inicial,))
 
     cursor.close()
     conn.close()
