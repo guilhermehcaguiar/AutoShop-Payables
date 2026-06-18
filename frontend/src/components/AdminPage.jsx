@@ -474,7 +474,7 @@ function AdminPage({ mostrarToast }) {
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Editar Usuário</h2>
-                <button onClick={() => setEditando(null)} className="text-slate-500 hover:text-white text-xl">&times;</button>
+                <button onClick={() => setEditando(null)} className="text-slate-500 hover:text-white text-xl active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
               </div>
               <form onSubmit={salvarEdicao} className="space-y-4">
                 <div>
@@ -503,7 +503,7 @@ function AdminPage({ mostrarToast }) {
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Novo Usuário</h2>
-                <button onClick={() => setCriando(false)} className="text-slate-500 hover:text-white text-xl">&times;</button>
+                <button onClick={() => setCriando(false)} className="text-slate-500 hover:text-white text-xl active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
               </div>
               <form onSubmit={criarUsuario} className="space-y-4">
                 <div>
@@ -514,7 +514,7 @@ function AdminPage({ mostrarToast }) {
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Sexo</label>
                   <select value={formCriar.sexo} onChange={(e) => setFormCriar({ ...formCriar, sexo: e.target.value })}
-                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60">
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-all duration-200">
                     <option value="M">Masculino</option>
                     <option value="F">Feminino</option>
                   </select>
@@ -567,7 +567,7 @@ function AdminPage({ mostrarToast }) {
                       Mesclar
                     </button>
                     <button onClick={() => { setEditandoCategoria(null); setNovoNomeCategoria(''); }}
-                      className="text-slate-500 hover:text-white text-xs px-2 py-1.5">Cancelar</button>
+                      className="text-slate-500 hover:text-white text-xs px-2 py-1.5 active:scale-[0.98] focus:outline-none transition-all duration-200">Cancelar</button>
                   </div>
                 ) : (
                   <button onClick={() => { setEditandoCategoria(nome); setNovoNomeCategoria(nome); }}

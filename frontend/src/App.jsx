@@ -715,7 +715,7 @@ function App() {
   if (!estaLogado) {
     return (
       <div className="min-h-screen bg-atend-bg flex items-center justify-center font-sans px-4">
-        <div className="w-full max-w-md bg-atend-card border border-atend-border p-8 rounded-2xl shadow-2xl relative overflow-hidden">
+        <div className="w-full max-w-md bg-atend-card border border-atend-border p-8 rounded-2xl shadow-2xl relative overflow-hidden animate-fade-in-scale">
           <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71]"></div>
           <div className="text-center mb-8">
             <h1 className="text-xl tracking-wide uppercase text-white"
