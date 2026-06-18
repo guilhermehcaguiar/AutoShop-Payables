@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../api.js';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
@@ -16,6 +16,7 @@ function RelatoriosPage() {
   const [projecao, setProjecao] = useState(null);
   const [filtroStatusRel, setFiltroStatusRel] = useState('');
   const [carregando, setCarregando] = useState(true);
+  const [evolucao, setEvolucao] = useState([]);
 
   const fetchRelatorio = async () => {
     setCarregando(true);
@@ -30,16 +31,18 @@ function RelatoriosPage() {
       paramsC.set('status', filtroStatusRel);
     }
     try {
-      const [respM, respF, respC, respP] = await Promise.all([
+      const [respM, respF, respC, respP, respE] = await Promise.all([
         apiFetch(`/relatorio/mensal?${paramsBase}`, { headers: { 'Authorization': `Bearer ${token}` } }),
         apiFetch(`/relatorio/fornecedores?${paramsF}`, { headers: { 'Authorization': `Bearer ${token}` } }),
         apiFetch(`/relatorio/categorias?${paramsC}`, { headers: { 'Authorization': `Bearer ${token}` } }),
         apiFetch(`/boletos/projecao-fluxo?${paramsBase}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/boletos/evolucao-mensal`, { headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
       if (respM.ok) setMensal(await respM.json());
       if (respF.ok) setPorFornecedor(await respF.json());
       if (respC.ok) setPorCategoria(await respC.json());
       if (respP.ok) setProjecao(await respP.json());
+      if (respE.ok) setEvolucao(await respE.json());
     } catch {} finally { setCarregando(false); }
   };
 
@@ -143,6 +146,29 @@ function RelatoriosPage() {
                       <Bar key={cat} dataKey={cat} stackId="a" fill={CORES[i % CORES.length]} radius={[0, 0, 0, 0]} />
                     ))}
                   </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {evolucao.length > 0 && (
+            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
+              <h3 className="text-sm font-bold text-white mb-4">📈 Evolução Mensal (12 meses)</h3>
+              <div className="w-full overflow-x-auto">
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={evolucao} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis dataKey="mes" tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={(v) => { const [a, m] = v.split('-'); return `${m}/${a.slice(2)}`; }} />
+                    <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip
+                      contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }}
+                      formatter={(value) => formatar(value)}
+                      labelFormatter={(label) => { const [a, m] = label.split('-'); return `${m}/${a}`; }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                    <Line type="monotone" dataKey="pago" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 4 }} name="Pago" />
+                    <Line type="monotone" dataKey="pendente" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }} name="Pendente" />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>

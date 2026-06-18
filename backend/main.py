@@ -1313,3 +1313,32 @@ def criar_boletos_lote(dados: CriarLoteInput, admin: dict = Depends(get_current_
     conexao.close()
     registrar_auditoria("criar_lote", "boleto", 0, admin["id"], f"{criados} boletos criados em lote")
     return {"mensagem": f"{criados} boletos criados com sucesso!", "criados": criados, "erros": erros}
+
+@app.get("/boletos/evolucao-mensal")
+def evolucao_mensal(usuario: dict = Depends(get_usuario_logado)):
+    conexao = get_connection()
+    cursor = conexao.cursor()
+    hoje = datetime.now()
+    meses = []
+    for i in range(11, -1, -1):
+        m = hoje.month - i
+        a = hoje.year
+        while m < 1:
+            m += 12
+            a -= 1
+        while m > 12:
+            m -= 12
+            a += 1
+        inicio = f"{a:04d}-{m:02d}-01"
+        if m == 12:
+            fim = f"{a+1:04d}-01-01"
+        else:
+            fim = f"{a:04d}-{m+1:02d}-01"
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM boletos WHERE vencimento >= %s AND vencimento < %s AND status = 'Pago' AND deletado_em IS NULL", (inicio, fim))
+        total_pago = float(cursor.fetchone()[0])
+        cursor.execute("SELECT COALESCE(SUM(valor), 0) FROM boletos WHERE vencimento >= %s AND vencimento < %s AND status != 'Pago' AND deletado_em IS NULL", (inicio, fim))
+        total_pendente = float(cursor.fetchone()[0])
+        rotulo = f"{a:04d}-{m:02d}"
+        meses.append({"mes": rotulo, "pago": total_pago, "pendente": total_pendente})
+    conexao.close()
+    return meses

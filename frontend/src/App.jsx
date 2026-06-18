@@ -11,6 +11,7 @@ import RelatoriosPage from './components/RelatoriosPage';
 import AuditoriaPage from './components/AuditoriaPage';
 import AdminPage from './components/AdminPage';
 import MetasPage from './components/MetasPage';
+import { SkeletonLinha, SkeletonCard } from './components/Skeleton';
 
 function App() {
   const [estaLogado, setEstaLogado] = useState(false);
@@ -39,6 +40,8 @@ function App() {
   const [usuarioAdmin, setUsuarioAdmin] = useState(false);
   const [modalAcao, setModalAcao] = useState({ aberto: false, boleto: null });
   const [modalPagamento, setModalPagamento] = useState({ aberto: false, boleto: null });
+  const [pg, setPg] = useState(1);
+  const porPg = 50;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -301,6 +304,11 @@ function App() {
     [boletosFiltrados]
   );
 
+  const totalPaginas = Math.max(1, Math.ceil(boletosFiltrados.length / porPg));
+  const boletosPg = boletosFiltrados.slice((pg - 1) * porPg, pg * porPg);
+
+  useEffect(() => { if (pg > totalPaginas) setPg(1); }, [pg, totalPaginas]);
+
   const meses = useMemo(() => {
     const lista = [];
     const agora = new Date();
@@ -480,12 +488,7 @@ function App() {
           </thead>
           <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
             {carregandoBoletos ? (
-              <tr><td colSpan="8" className="px-5 py-10 text-center text-slate-500 italic">
-                <div className="flex items-center justify-center gap-2">
-                  <span className="inline-block w-4 h-4 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
-                  Carregando...
-                </div>
-              </td></tr>
+              Array.from({ length: 6 }).map((_, i) => <SkeletonLinha key={i} colunas={8} />)
             ) : boletosFiltrados.length === 0 ? (
               <tr><td colSpan="8" className="px-5 py-12 text-center text-slate-500 bg-slate-900/10">
                 <div className="text-2xl mb-2">📦</div>
@@ -493,7 +496,7 @@ function App() {
                 <p className="text-xs text-slate-500 mt-0.5">Neste período ou filtro selecionado</p>
               </td></tr>
             ) : (
-              boletosFiltrados.map((boleto) => (
+              boletosPg.map((boleto) => (
                 <tr key={boleto.id}
                   onClick={() => abrirModalAcao(boleto)}
                   className={`cursor-pointer hover:bg-slate-900/20 even:bg-slate-900/10 transition-colors ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5 even:bg-rose-500/10' : ''}`}>
@@ -549,19 +552,14 @@ function App() {
 
       <div className="md:hidden divide-y divide-atend-border/50">
         {carregandoBoletos ? (
-          <div className="px-5 py-10 text-center text-slate-500 italic">
-            <div className="flex items-center justify-center gap-2">
-              <span className="inline-block w-4 h-4 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
-              Carregando...
-            </div>
-          </div>
+          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
         ) : boletosFiltrados.length === 0 ? (
           <div className="px-5 py-10 text-center text-slate-500">
             <div className="text-2xl mb-1">📦</div>
             <p className="text-sm font-medium text-slate-400">Nenhum boleto cadastrado</p>
           </div>
         ) : (
-          boletosFiltrados.map((boleto) => (
+          boletosPg.map((boleto) => (
             <div key={boleto.id} onClick={() => abrirModalAcao(boleto)}
               className={`px-5 py-4 cursor-pointer active:bg-slate-800/30 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5' : ''}`}>
               <div className="flex items-start gap-3">
@@ -606,6 +604,25 @@ function App() {
           </div>
         )}
       </div>
+
+      {totalPaginas > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-4 pb-2">
+          <button onClick={() => setPg(pg - 1)} disabled={pg <= 1}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            ‹ Anterior
+          </button>
+          {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((p) => (
+            <button key={p} onClick={() => setPg(p)}
+              className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${p === pg ? 'bg-atend-verde text-slate-950' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'}`}>
+              {p}
+            </button>
+          ))}
+          <button onClick={() => setPg(pg + 1)} disabled={pg >= totalPaginas}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            Próximo ›
+          </button>
+        </div>
+      )}
     </>
   );
 
