@@ -3,6 +3,7 @@ import { apiFetch } from '../api.js';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 import { SkeletonResumo, SkeletonGrafico } from './Skeleton';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
@@ -104,14 +105,31 @@ function RelatoriosPage({ mostrarToast }) {
       const pdfParams = new URLSearchParams({ ano, mes });
       if (diaInicio) pdfParams.set('dia_inicio', diaInicio);
       if (diaFim) pdfParams.set('dia_fim', diaFim);
-      const [respM, respC] = await Promise.all([
+      const [respM, respC, respE, respF] = await Promise.all([
         apiFetch(`/relatorio/mensal?${pdfParams}`),
         apiFetch(`/relatorio/categorias?${pdfParams}`),
+        apiFetch(`/boletos/evolucao-mensal`),
+        apiFetch(`/relatorio/fornecedores?${pdfParams}`),
       ]);
       if (!respM.ok) { mostrarToast?.('Erro ao carregar dados', 'erro'); setExportando(false); return; }
 
       const m = await respM.json();
       const cats = respC.ok ? await respC.json() : [];
+      const evol = respE.ok ? await respE.json() : [];
+      const fornecs = respF.ok ? await respF.json() : [];
+
+      const evolArray = Array.isArray(evol) ? evol : [];
+      const mesKey = `${ano}-${String(mes).padStart(2, '0')}`;
+      const idxAtual = evolArray.findIndex((e) => e.mes === mesKey);
+      const mesAnterior = idxAtual > 0 ? evolArray[idxAtual - 1] : null;
+      const totalGeral = (m.total_pago || 0) + (m.total_pendente || 0);
+      const totalAnterior = mesAnterior ? (mesAnterior.pago || 0) + (mesAnterior.pendente || 0) : 0;
+      const diffTotal = totalGeral - totalAnterior;
+      const diffPct = totalAnterior > 0 ? ((diffTotal / totalAnterior) * 100) : 0;
+
+      const totalDias = diaInicio && diaFim ? (parseInt(diaFim) - parseInt(diaInicio) + 1) : new Date(ano, mes, 0).getDate();
+      const mediaDiaria = totalDias > 0 ? totalGeral / totalDias : 0;
+      const maiorCat = (Array.isArray(cats) ? cats : []).reduce((max, c) => (c.total > (max?.total || 0) ? c : max), null);
 
       let doc;
       try {
@@ -147,6 +165,25 @@ function RelatoriosPage({ mostrarToast }) {
           doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
           doc.text(text.toUpperCase(), ml + 7, yp + 8);
+        };
+
+        const checkPageBreak = (h) => {
+          if (y + h > ph - 20) {
+            doc.addPage();
+            pageBg();
+            y = 20;
+          }
+        };
+
+        const addPageNumbers = () => {
+          const totalPages = doc.internal.getNumberOfPages();
+          for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Página ${i} de ${totalPages}`, pw / 2, ph - 8, { align: 'center' });
+          }
         };
 
         pageBg();
@@ -217,13 +254,21 @@ function RelatoriosPage({ mostrarToast }) {
           : `${nomeMes} ${ano}`;
         doc.text(`Emissão: ${dataEmissao}`, ml, y);
         doc.text(`Período: ${periodoLabel}`, ml + cw, y, { align: 'right' });
-        y += 8;
+
+        if (mesAnterior) {
+          const seta = diffTotal >= 0 ? '▲' : '▼';
+          const cor = diffTotal >= 0 ? '46,204,113' : '244,63,94';
+          doc.setTextColor(...cor.split(',').map(Number));
+          doc.text(`${seta} ${diffTotal >= 0 ? '+' : ''}${fmt(diffTotal)} (${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(1)}%) vs mês anterior`, centerX, y + 5, { align: 'center' });
+        }
+        y += 12;
 
         sectionTitle('Demonstrativo do Resultado', y);
         y += 16;
 
         const headerRowH = 8;
         const dataRowH = 8;
+        const pct = (v) => totalGeral > 0 ? ` (${((v / totalGeral) * 100).toFixed(1)}%)` : '';
 
         const dreContentH = headerRowH + 3 * dataRowH + 2 + dataRowH + 6;
         card(ml, cw, dreContentH, y);
@@ -231,30 +276,38 @@ function RelatoriosPage({ mostrarToast }) {
 
         const innerX = ml + 4;
         const innerW = cw - 8;
+        const valColW = innerW * 0.45;
+        const pctColW = innerW * 0.18;
+        const valX = innerX + innerW - valColW;
+        const pctX = valX - 2;
         const colPad = 2;
-        const headerLabels = ['Descrição', 'Valor'];
         doc.setFillColor(46, 204, 113);
         doc.rect(innerX, ty, innerW, headerRowH, 'F');
         doc.setTextColor(10, 10, 10);
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.text(headerLabels[0], innerX + colPad, ty + 5);
-        doc.text(headerLabels[1], innerX + innerW - colPad, ty + 5, { align: 'right' });
+        doc.text('Descrição', innerX + colPad, ty + 5);
+        doc.text('Valor', valX + valColW - colPad, ty + 5, { align: 'right' });
+        doc.text('%', pctX - colPad, ty + 5, { align: 'right' });
 
         let ry = ty + headerRowH;
         const dreRows = [
-          ['Receita Líquida (Total Geral)', fmt(m.total_pago + m.total_pendente), true, true],
-          ['  Total Pago', fmt(m.total_pago), false, false],
-          ['  Total Pendente', fmt(m.total_pendente), true, false],
+          ['Receita Líquida (Total Geral)', fmt(totalGeral), pct(totalGeral), true, true],
+          ['  Total Pago', fmt(m.total_pago || 0), pct(m.total_pago || 0), false, false],
+          ['  Total Pendente', fmt(m.total_pendente || 0), pct(m.total_pendente || 0), true, false],
         ];
-        dreRows.forEach(([label, value, isAlt, isBold]) => {
+        dreRows.forEach(([label, value, pctStr, isAlt, isBold]) => {
           doc.setFillColor(isAlt ? 26 : 22, isAlt ? 29 : 26, isAlt ? 39 : 36);
           doc.rect(innerX, ry, innerW, dataRowH, 'F');
-          doc.setTextColor(isBold ? 255 : 200, isBold ? 255 : 200, isBold ? 180 : 180);
+          doc.setTextColor(isBold ? 255 : 220, isBold ? 255 : 220, isBold ? 255 : 220);
           doc.setFontSize(8);
           doc.setFont('helvetica', isBold ? 'bold' : 'normal');
           doc.text(label, innerX + colPad, ry + 5.5);
-          doc.text(value, innerX + innerW - colPad, ry + 5.5, { align: 'right' });
+          doc.text(value, valX + valColW - colPad, ry + 5.5, { align: 'right' });
+          doc.setTextColor(148, 163, 184);
+          doc.setFontSize(7);
+          doc.text(pctStr, pctX - colPad, ry + 5.5, { align: 'right' });
+          doc.setFontSize(8);
           ry += dataRowH;
         });
 
@@ -269,12 +322,13 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.text('Boletos no Mês', innerX + colPad, ry + 5.5);
-        doc.text(String(m.total_boletos || 0), innerX + innerW - colPad, ry + 5.5, { align: 'right' });
+        doc.text(String(m.total_boletos || 0), valX + valColW - colPad, ry + 5.5, { align: 'right' });
         ry += dataRowH + 2;
 
         y = ry + 8;
 
         if (Array.isArray(cats) && cats.length > 0) {
+          checkPageBreak(14 + cats.length * dataRowH + 14);
           sectionTitle('Distribuição por Categoria', y);
           y += 16;
 
@@ -301,7 +355,7 @@ function RelatoriosPage({ mostrarToast }) {
           cats.forEach((c, i) => {
             doc.setFillColor(i % 2 === 0 ? 26 : 22, i % 2 === 0 ? 29 : 26, i % 2 === 0 ? 39 : 36);
             doc.rect(innerX, cry, innerW, dataRowH, 'F');
-            doc.setTextColor(200, 200, 180);
+            doc.setTextColor(220, 220, 220);
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
             doc.text(c.categoria || '—', innerX + colPad, cry + 5.5);
@@ -312,7 +366,57 @@ function RelatoriosPage({ mostrarToast }) {
           y = cry + 12;
         }
 
-        y = Math.max(y, ph - 18);
+        // ── Resumo Executivo ──
+        checkPageBreak(55);
+        const maxCatName = maiorCat?.categoria || '—';
+        const maxCatVal = maiorCat?.total ? fmt(Number(maiorCat.total)) : '—';
+        sectionTitle('Resumo do Mês', y);
+        y += 16;
+        card(ml, cw, 38, y);
+        const rsY = y + 4;
+        const rsRows = [
+          ['Total Geral', fmt(totalGeral)],
+          ['Média por Dia', fmt(mediaDiaria)],
+          ['Total Boletos', String(m.total_boletos || 0)],
+          ['Maior Categoria', `${maxCatName} (${maxCatVal})`],
+        ];
+        ry = rsY;
+        rsRows.forEach(([label, value], i) => {
+          doc.setFillColor(i % 2 === 0 ? 26 : 22, i % 2 === 0 ? 29 : 26, i % 2 === 0 ? 39 : 36);
+          doc.rect(innerX, ry, innerW, dataRowH, 'F');
+          doc.setTextColor(220, 220, 220);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.text(label, innerX + colPad, ry + 5.5);
+          doc.text(value, innerX + innerW - colPad, ry + 5.5, { align: 'right' });
+          ry += dataRowH;
+        });
+
+        y = ry + 12;
+
+        // ── Gráfico de Projeção ──
+        const chartEl = document.getElementById('chart-pdf-projecao');
+        if (chartEl) {
+          try {
+            const chartCanvas = await html2canvas(chartEl, {
+              backgroundColor: '#1a1d27',
+              scale: 2,
+              useCORS: true,
+              logging: false,
+            });
+            const chartImgData = chartCanvas.toDataURL('image/png');
+            const chartImgW = cw;
+            const chartImgH = (chartCanvas.height / chartCanvas.width) * chartImgW;
+            checkPageBreak(chartImgH + 25);
+            sectionTitle('Projeção de Fluxo', y);
+            y += 16;
+            doc.addImage(chartImgData, 'PNG', ml, y, chartImgW, chartImgH);
+            y += chartImgH + 10;
+          } catch {}
+        }
+
+        // ── Footer ──
+        y = Math.max(y, ph - 24);
         doc.setDrawColor(42, 45, 58);
         doc.setLineWidth(0.3);
         doc.line(ml, y, ml + cw, y);
@@ -323,7 +427,17 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setTextColor(100, 116, 139);
         doc.text('Atend-Car © 2026 — Todos os direitos reservados.', centerX, y, { align: 'center' });
 
-        doc.save(`DRE-${nomeMes}-${ano}.pdf`);
+        addPageNumbers();
+
+        const pdfBlob = doc.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = pdfUrl;
+        link.download = `DRE-${nomeMes}-${ano}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
         mostrarToast?.('PDF exportado com sucesso!');
       } catch (e) {
         mostrarToast?.('Erro ao gerar PDF: ' + e.message, 'erro');
@@ -398,7 +512,7 @@ function RelatoriosPage({ mostrarToast }) {
           <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
             <AccordionSection indice={1} icone="📊" titulo="Projeção de Fluxo (Previsto)" descricao="Gráfico de barras com fluxo de caixa projetado">
               {dadosGrafico.length > 0 ? (
-                <div className="w-full overflow-x-auto">
+                <div className="w-full overflow-x-auto" id="chart-pdf-projecao">
                   <ResponsiveContainer width={Math.max(dadosGrafico.length * 120, 400)} height={320}>
                     <BarChart data={dadosGrafico} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
