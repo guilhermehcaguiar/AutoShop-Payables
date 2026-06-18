@@ -304,9 +304,9 @@ function RelatoriosPage({ mostrarToast }) {
             doc.setTextColor(200, 200, 180);
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
-            doc.text(c.categoria, innerX + colPad, cry + 5.5);
-            doc.text(fmt(c.total), col2X + col2W - colPad, cry + 5.5, { align: 'right' });
-            doc.text(String(c.quantidade), col3X + col3W - colPad, cry + 5.5, { align: 'right' });
+            doc.text(c.categoria || '—', innerX + colPad, cry + 5.5);
+            doc.text(fmt(Number(c.total) || 0), col2X + col2W - colPad, cry + 5.5, { align: 'right' });
+            doc.text(String(c.quantidade ?? ''), col3X + col3W - colPad, cry + 5.5, { align: 'right' });
             cry += dataRowH;
           });
           y = cry + 12;
