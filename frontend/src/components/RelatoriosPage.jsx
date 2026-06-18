@@ -312,7 +312,7 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.text('Boletos no Mês', innerX + colPad, ry + 5.5);
-        doc.text(String(m.total_boletos || 0), valX + valColW - colPad, ry + 5.5, { align: 'right' });
+        doc.text(String(m.total_boletos || 0), innerX + innerW - colPad, ry + 5.5, { align: 'right' });
         ry += dataRowH + 2;
 
         y = ry + 8;
