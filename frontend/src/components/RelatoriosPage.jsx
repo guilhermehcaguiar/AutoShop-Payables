@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../api.js';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
+import { SkeletonResumo, SkeletonGrafico } from './Skeleton';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
@@ -100,9 +101,14 @@ function RelatoriosPage() {
       </div>
 
       {carregando ? (
-        <div className="flex items-center justify-center py-16 gap-2 text-slate-500">
-          <span className="inline-block w-5 h-5 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
-          <span className="text-sm italic">Carregando relatório...</span>
+        <div className="space-y-6">
+          <SkeletonResumo cards={3} />
+          <SkeletonGrafico />
+          <SkeletonGrafico />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SkeletonGrafico />
+            <SkeletonGrafico />
+          </div>
         </div>
       ) : (
         <>

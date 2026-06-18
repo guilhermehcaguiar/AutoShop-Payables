@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../api.js';
+import { SkeletonTabela } from './Skeleton';
 
 function MetasPage({ mostrarToast }) {
   const [metas, setMetas] = useState([]);
@@ -71,9 +72,19 @@ function MetasPage({ mostrarToast }) {
   };
 
   if (carregando) return (
-    <div className="flex items-center justify-center py-16 gap-2 text-slate-500">
-      <span className="inline-block w-5 h-5 border-2 border-atend-verde/30 border-t-atend-verde rounded-full animate-spin" />
-      <span className="text-sm italic">Carregando...</span>
+    <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
+      <div className="px-5 py-4 border-b border-atend-border">
+        <div className="h-5 bg-slate-700/50 rounded w-40 animate-pulse" />
+        <div className="h-3 bg-slate-700/50 rounded w-56 mt-1 animate-pulse" />
+      </div>
+      <div className="p-5 border-b border-atend-border">
+        <div className="flex gap-3">
+          <div className="h-10 bg-slate-700/50 rounded flex-1 animate-pulse" />
+          <div className="h-10 bg-slate-700/50 rounded w-40 animate-pulse" />
+          <div className="h-10 bg-slate-700/50 rounded w-24 animate-pulse" />
+        </div>
+      </div>
+      <SkeletonTabela linhas={4} colunas={2} />
     </div>
   );
 

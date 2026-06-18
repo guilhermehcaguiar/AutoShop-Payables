@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../api.js';
 
 function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
@@ -16,6 +16,8 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [mostrarDropdownFornecedor, setMostrarDropdownFornecedor] = useState(false);
+  const [recorrente, setRecorrente] = useState(false);
+  const [nMeses, setNMeses] = useState(3);
   const editando = !!boletoEditando;
 
   const fornecedoresFiltrados = fornecedores.filter((f) =>
@@ -38,6 +40,8 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       setCodigoBarras(''); setCategoria('');
       setDescricao(''); setMetodoPagamento(''); setBanco('');
     }
+    setRecorrente(false);
+    setNMeses(3);
     setErro('');
     const token = localStorage.getItem('token');
     const headers = { 'Authorization': `Bearer ${token}` };
@@ -48,6 +52,27 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
     apiFetch('/boletos/bancos-utilizados', { headers })
       .then((r) => r.ok && r.json()).then(setBancos).catch(() => {});
   }, [aberto, boletoEditando]);
+
+  const adicionarMeses = (data, meses) => {
+    const d = new Date(data + 'T12:00:00');
+    const dia = d.getDate();
+    d.setMonth(d.getMonth() + meses);
+    if (d.getDate() !== dia) d.setDate(0);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const boletosPreview = useMemo(() => {
+    if (!recorrente || !vencimento || !valor) return [];
+    const lista = [];
+    for (let i = 0; i < nMeses; i++) {
+      lista.push({
+        mes: i === 0 ? 'Este mês' : `+${i} mês`,
+        vencimento: adicionarMeses(vencimento, i),
+        valor: valor,
+      });
+    }
+    return lista;
+  }, [recorrente, vencimento, valor, nMeses]);
 
   const autoSalvarFornecedor = async (token) => {
     const existe = fornecedores.some((f) => f.nome.toLowerCase() === fornecedor.toLowerCase());
@@ -65,32 +90,46 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
     setErro('');
     setCarregando(true);
     const token = localStorage.getItem('token');
-    const url = editando
-      ? `/boletos/${boletoEditando.id}`
-      : '/boletos/';
-    const method = editando ? 'PUT' : 'POST';
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const bodyBase = {
+      fornecedor,
+      valor: parseFloat(valor.replace(',', '.')),
+      codigo_barras: codigoBarras || null,
+      categoria: categoria || null,
+      descricao: descricao || null,
+      metodo_pagamento: metodoPagamento || null,
+      banco: banco || null,
+    };
     try {
-      const resposta = await apiFetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          fornecedor,
-          valor: parseFloat(valor.replace(',', '.')),
-          vencimento,
-          codigo_barras: codigoBarras || null,
-          categoria: categoria || null,
-          descricao: descricao || null,
-          metodo_pagamento: metodoPagamento || null,
-          banco: banco || null,
-        }),
-      });
-      const dados = await resposta.json();
-      if (resposta.ok) {
-        if (!editando) await autoSalvarFornecedor(token);
+      if (editando) {
+        const resp = await apiFetch(`/boletos/${boletoEditando.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ ...bodyBase, vencimento }),
+        });
+        const dados = await resp.json();
+        if (!resp.ok) { setErro(dados.detail || 'Erro ao salvar boleto'); setCarregando(false); return; }
+        onBoletoCriado();
+        onFechar();
+        setCarregando(false);
+        return;
+      }
+      const boletosCriar = recorrente ? boletosPreview : [{ vencimento, ...bodyBase }];
+      let sucesso = 0;
+      for (const b of boletosCriar) {
+        const resp = await apiFetch('/boletos/', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ...b, vencimento: b.vencimento }),
+        });
+        if (resp.ok) sucesso++;
+      }
+      await autoSalvarFornecedor(token);
+      if (sucesso > 0) {
         onBoletoCriado();
         onFechar();
       } else {
-        setErro(dados.detail || 'Erro ao salvar boleto');
+        setErro('Erro ao criar boletos');
       }
     } catch {
       setErro('Erro de conexão com o servidor');
@@ -193,6 +232,50 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
               {bancos.map((b, i) => (<option key={i} value={b} />))}
             </datalist>
           </div>
+          {!editando && (
+            <div className="flex items-center gap-3 pt-1">
+              <button type="button" role="switch" aria-checked={recorrente}
+                onClick={() => setRecorrente(!recorrente)}
+                className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 ${recorrente ? 'bg-atend-verde shadow-[0_0_8px_rgba(34,197,94,0.3)]' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${recorrente ? 'translate-x-5 scale-105' : 'translate-x-0 scale-100'}`} />
+              </button>
+              <div>
+                <p className="text-sm font-medium text-white">Repetir mensalmente</p>
+                <p className="text-xs text-slate-500">Criar boletos para os próximos meses</p>
+              </div>
+            </div>
+          )}
+          {recorrente && !editando && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Número de meses</label>
+              <input type="number" min={1} max={24} value={nMeses} onChange={(e) => setNMeses(Math.min(24, Math.max(1, parseInt(e.target.value) || 1)))}
+                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors" />
+              {boletosPreview.length > 1 && (
+                <div className="mt-3 bg-slate-900/30 rounded-lg overflow-hidden border border-atend-border/50">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-atend-border/50 text-slate-400 font-semibold uppercase tracking-wider">
+                        <th className="px-3 py-2">Período</th>
+                        <th className="px-3 py-2">Vencimento</th>
+                        <th className="px-3 py-2 text-right">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-atend-border/30 text-slate-300">
+                      {boletosPreview.map((b, i) => (
+                        <tr key={i} className="hover:bg-slate-900/20">
+                          <td className="px-3 py-2">{b.mes}</td>
+                          <td className="px-3 py-2">{new Date(b.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                          <td className="px-3 py-2 text-right font-mono">
+                            R$ {parseFloat(b.valor.replace(',', '.')).toFixed(2).replace('.', ',')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
           {erro && (
             <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erro}</div>
           )}
