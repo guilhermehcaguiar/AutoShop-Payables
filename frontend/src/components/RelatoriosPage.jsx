@@ -3,7 +3,6 @@ import { apiFetch } from '../api.js';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 import { SkeletonResumo, SkeletonGrafico } from './Skeleton';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
@@ -101,66 +100,98 @@ function RelatoriosPage({ mostrarToast }) {
 
   const exportarPDF = async () => {
     setExportando(true);
-    const token = localStorage.getItem('token');
     try {
       const [respM, respC] = await Promise.all([
-        apiFetch(`/relatorio/mensal?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/mensal?ano=${ano}&mes=${mes}`),
+        apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}`),
       ]);
-      const mensalData = respM.ok ? await respM.json() : null;
-      const catsData = respC.ok ? await respC.json() : [];
+      if (!respM.ok) { mostrarToast?.('Erro ao carregar dados', 'erro'); setExportando(false); return; }
+
+      const m = await respM.json();
+      const cats = respC.ok ? await respC.json() : [];
 
       const doc = new jsPDF();
-      const largura = doc.internal.pageSize.getWidth();
-
-      doc.setFontSize(18);
-      doc.setTextColor(46, 204, 113);
-      doc.text('AutoShop Payables', largura / 2, 20, { align: 'center' });
-
-      doc.setFontSize(14);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`DRE - ${nomeMes} ${ano}`, largura / 2, 30, { align: 'center' });
-
+      const pw = doc.internal.pageSize.getWidth();
+      const ml = 14, mr = 14, cw = pw - ml - mr;
       const fmt = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-      const totalGeral = mensalData ? mensalData.total_pago + mensalData.total_pendente : 0;
-      const totalPago = mensalData ? mensalData.total_pago : 0;
-      const totalPendente = mensalData ? mensalData.total_pendente : 0;
-      const totalBoletos = mensalData ? mensalData.total_boletos : 0;
+      let y = 20;
 
-      doc.autoTable({
-        startY: 40,
-        head: [['Conta', 'Valor']],
-        body: [
-          ['Receita Líquida (Total Geral)', fmt(totalGeral)],
-          ['  Total Pago', fmt(totalPago)],
-          ['  Total Pendente', fmt(totalPendente)],
-          ['Boletos no Mês', String(totalBoletos)],
-        ],
-        headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
-        bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
-        alternateRowStyles: { fillColor: [30, 41, 59] },
-        styles: { fillColor: [15, 23, 42], halign: 'left' },
-        columnStyles: { 1: { halign: 'right' } },
-      });
+      const title = (text, size, color, align = 'center') => {
+        doc.setFontSize(size);
+        doc.setTextColor(color[0], color[1], color[2]);
+        doc.text(text, align === 'center' ? pw / 2 : ml, y, align === 'center' ? { align: 'center' } : undefined);
+        y += size * 0.55;
+      };
 
-      if (Array.isArray(catsData) && catsData.length > 0) {
-        const catBody = catsData.map((c) => [c.categoria, fmt(c.total), String(c.quantidade)]);
-        doc.autoTable({
-          startY: doc.lastAutoTable.finalY + 10,
-          head: [['Categoria', 'Valor', 'Qtd']],
-          body: catBody,
-          headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
-          bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
-          alternateRowStyles: { fillColor: [30, 41, 59] },
-          styles: { fillColor: [15, 23, 42], halign: 'left' },
-          columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
+      const tableHeader = (cols, widths) => {
+        const h = 7;
+        doc.setFillColor(46, 204, 113);
+        doc.rect(ml, y, cw, h, 'F');
+        doc.setTextColor(10, 10, 10);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        let x = ml;
+        cols.forEach((c, i) => {
+          doc.text(c, x + 2, y + 5, { align: 'left' });
+          x += widths[i];
+        });
+        y += h;
+      };
+
+      const tableRow = (cols, widths, isAlt = false, isBold = false) => {
+        const h = 7;
+        doc.setFillColor(isAlt ? 22 : 15, isAlt ? 30 : 23, isAlt ? 40 : 42);
+        doc.rect(ml, y, cw, h, 'F');
+        doc.setTextColor(isBold ? 255 : 200, isBold ? 255 : 200, isBold ? 255 : 180);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+        let x = ml;
+        cols.forEach((val, i) => {
+          const isRight = i === widths.length - 1;
+          doc.text(String(val), isRight ? x + widths[i] - 2 : x + 2, y + 5, isRight ? { align: 'right' } : undefined);
+          x += widths[i];
+        });
+        y += h;
+      };
+
+      const tableLine = () => {
+        doc.setDrawColor(46, 204, 113);
+        doc.setLineWidth(0.5);
+        doc.line(ml, y, ml + cw, y);
+        y += 1;
+      };
+
+      // ── Title ──
+      title('AutoShop Payables', 16, [46, 204, 113]);
+      title(`DRE - ${nomeMes} ${ano}`, 12, [15, 23, 42]);
+
+      const totalGeral = m.total_pago + m.total_pendente;
+      const w1 = cw * 0.7, w2 = cw * 0.3;
+
+      // ── DRE Table ──
+      tableHeader(['Conta', 'Valor'], [w1, w2]);
+      tableRow(['Receita Líquida (Total Geral)', fmt(totalGeral)], [w1, w2], false, true);
+      tableRow(['  Total Pago', fmt(m.total_pago)], [w1, w2], true);
+      tableRow(['  Total Pendente', fmt(m.total_pendente)], [w1, w2]);
+      tableLine();
+      tableRow(['Boletos no Mês', String(m.total_boletos || 0)], [w1, w2], true, true);
+
+      // ── Categories Table ──
+      if (Array.isArray(cats) && cats.length > 0) {
+        y += 6;
+        title('Por Categoria', 10, [46, 204, 113], 'left');
+        const w3_1 = cw * 0.6, w3_2 = cw * 0.25, w3_3 = cw * 0.15;
+        tableHeader(['Categoria', 'Valor', 'Qtd'], [w3_1, w3_2, w3_3]);
+        cats.forEach((c, i) => {
+          tableRow([c.categoria, fmt(c.total), String(c.quantidade)], [w3_1, w3_2, w3_3], i % 2 === 1);
         });
       }
 
       doc.save(`DRE-${nomeMes}-${ano}.pdf`);
-      if (mostrarToast) mostrarToast('PDF exportado com sucesso!');
-    } catch {
-      if (mostrarToast) mostrarToast('Erro ao exportar PDF', 'erro');
+      mostrarToast?.('PDF exportado com sucesso!');
+    } catch (err) {
+      console.error(err);
+      mostrarToast?.('Erro ao exportar PDF', 'erro');
     } finally {
       setExportando(false);
     }
