@@ -7,7 +7,7 @@ import 'jspdf-autotable';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
-function RelatoriosPage() {
+function RelatoriosPage({ mostrarToast }) {
   const agora = new Date();
   const [ano, setAno] = useState(agora.getFullYear());
   const [mes, setMes] = useState(agora.getMonth() + 1);
@@ -20,6 +20,8 @@ function RelatoriosPage() {
   const [filtroStatusRel, setFiltroStatusRel] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [evolucao, setEvolucao] = useState([]);
+  const [secaoAberta, setSecaoAberta] = useState(null);
+  const [exportando, setExportando] = useState(false);
 
   const fetchRelatorio = async () => {
     setCarregando(true);
@@ -75,6 +77,94 @@ function RelatoriosPage() {
   const categoriasGrafico = dadosGrafico.length > 0
     ? Object.keys(dadosGrafico[0]).filter((k) => k !== 'name' && k !== 'total')
     : [];
+
+  const AccordionSection = ({ indice, icone, titulo, descricao, children }) => (
+    <div className="border-b border-atend-border last:border-b-0">
+      <button onClick={() => setSecaoAberta(secaoAberta === indice ? null : indice)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-all duration-200 active:scale-[0.98] focus:outline-none">
+        <div className="flex items-center gap-3">
+          <span className="text-lg">{icone}</span>
+          <div className="text-left">
+            <h3 className="text-sm font-bold text-white">{titulo}</h3>
+            <p className="text-xs text-slate-400">{descricao}</p>
+          </div>
+        </div>
+        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${secaoAberta === indice ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
+      </button>
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${secaoAberta === indice ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className="px-5 pb-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+
+  const exportarPDF = async () => {
+    setExportando(true);
+    const token = localStorage.getItem('token');
+    try {
+      const [respM, respC] = await Promise.all([
+        apiFetch(`/relatorio/mensal?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+      ]);
+      const mensalData = respM.ok ? await respM.json() : null;
+      const catsData = respC.ok ? await respC.json() : [];
+
+      const doc = new jsPDF();
+      const largura = doc.internal.pageSize.getWidth();
+
+      doc.setFontSize(18);
+      doc.setTextColor(46, 204, 113);
+      doc.text('AutoShop Payables', largura / 2, 20, { align: 'center' });
+
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`DRE - ${nomeMes} ${ano}`, largura / 2, 30, { align: 'center' });
+
+      const fmt = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      const totalGeral = mensalData ? mensalData.total_pago + mensalData.total_pendente : 0;
+      const totalPago = mensalData ? mensalData.total_pago : 0;
+      const totalPendente = mensalData ? mensalData.total_pendente : 0;
+      const totalBoletos = mensalData ? mensalData.total_boletos : 0;
+
+      doc.autoTable({
+        startY: 40,
+        head: [['Conta', 'Valor']],
+        body: [
+          ['Receita Líquida (Total Geral)', fmt(totalGeral)],
+          ['  Total Pago', fmt(totalPago)],
+          ['  Total Pendente', fmt(totalPendente)],
+          ['Boletos no Mês', String(totalBoletos)],
+        ],
+        headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
+        bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
+        alternateRowStyles: { fillColor: [30, 41, 59] },
+        styles: { fillColor: [15, 23, 42], halign: 'left' },
+        columnStyles: { 1: { halign: 'right' } },
+      });
+
+      if (Array.isArray(catsData) && catsData.length > 0) {
+        const catBody = catsData.map((c) => [c.categoria, fmt(c.total), String(c.quantidade)]);
+        doc.autoTable({
+          startY: doc.lastAutoTable.finalY + 10,
+          head: [['Categoria', 'Valor', 'Qtd']],
+          body: catBody,
+          headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
+          bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
+          alternateRowStyles: { fillColor: [30, 41, 59] },
+          styles: { fillColor: [15, 23, 42], halign: 'left' },
+          columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
+        });
+      }
+
+      doc.save(`DRE-${nomeMes}-${ano}.pdf`);
+      if (mostrarToast) mostrarToast('PDF exportado com sucesso!');
+    } catch {
+      if (mostrarToast) mostrarToast('Erro ao exportar PDF', 'erro');
+    } finally {
+      setExportando(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -136,240 +226,180 @@ function RelatoriosPage() {
             </div>
           </div>
 
-          {dadosGrafico.length > 0 && (
-            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-              <h3 className="text-sm font-bold text-white mb-4">📊 Projeção de Fluxo (Previsto)</h3>
-              <div className="w-full overflow-x-auto">
-                <ResponsiveContainer width={Math.max(dadosGrafico.length * 120, 400)} height={320}>
-                  <BarChart data={dadosGrafico} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                    <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip
-                      contentStyle={{ background: 'var(--c-tooltip-bg, #1e293b)', border: '1px solid var(--c-tooltip-border, #334155)', borderRadius: 8, color: 'var(--c-tooltip-color, #f1f5f9)', fontSize: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
-                      formatter={(value) => formatar(value)}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
-                    {categoriasGrafico.map((cat, i) => (
-                      <Bar key={cat} dataKey={cat} stackId="a" fill={CORES[i % CORES.length]} radius={[4, 4, 0, 0]} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {evolucao.length > 0 && (
-            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-              <h3 className="text-sm font-bold text-white mb-4">📈 Evolução Mensal (12 meses)</h3>
-              <div className="w-full overflow-x-auto">
-                <ResponsiveContainer width="100%" height={320}>
-                  <LineChart data={evolucao} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="mes" tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={(v) => { const [a, m] = v.split('-'); return `${m}/${a.slice(2)}`; }} />
-                    <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip
-                      contentStyle={{ background: 'var(--c-tooltip-bg, #1e293b)', border: '1px solid var(--c-tooltip-border, #334155)', borderRadius: 8, color: 'var(--c-tooltip-color, #f1f5f9)', fontSize: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
-                      formatter={(value) => formatar(value)}
-                      labelFormatter={(label) => { const [a, m] = label.split('-'); return `${m}/${a}`; }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
-                    <Line type="monotone" dataKey="pago" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 4 }} name="Pago" />
-                    <Line type="monotone" dataKey="pendente" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }} name="Pendente" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-              <h3 className="text-sm font-bold text-white mb-4">📊 Por Fornecedor</h3>
-              {porFornecedor.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">Nenhum dado no período.</p>
-              ) : (
-                <div className="space-y-3">
-                  {porFornecedor.map((f, i) => (
-                    <div key={i}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-slate-300 font-medium truncate">{f.fornecedor}</span>
-                        <span className="text-white font-semibold">{formatar(f.total)}</span>
-                      </div>
-                      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                        <div className="h-full rounded-full bg-gradient-to-r from-atend-verde to-emerald-400 transition-all duration-500"
-                          style={{ width: `${(f.total / maxTotal) * 100}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-              <h3 className="text-sm font-bold text-white mb-4">🏷️ Por Categoria</h3>
-              {porCategoria.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">Nenhuma categoria no período.</p>
-              ) : (
-                <div className="space-y-3">
-                  {porCategoria.map((c, i) => {
-                    const maxCat = Math.max(...porCategoria.map((x) => x.total), 1);
-                    return (
-                      <div key={i}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-slate-300 font-medium">{c.categoria}</span>
-                          <span className="text-white font-semibold">{formatar(c.total)} ({c.quantidade}x)</span>
-                        </div>
-                        <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                          <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400 transition-all duration-500"
-                            style={{ width: `${(c.total / maxCat) * 100}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── DRE (Demonstração do Resultado) ── */}
-          <div className="rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white">📋 Demonstrativo do Resultado (DRE)</h3>
-              <button onClick={exportarPDF}
-                className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all duration-200">
-                Exportar PDF
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                    <th className="px-4 py-3">Conta</th>
-                    <th className="px-4 py-3 text-right">Valor</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-atend-border/50 text-sm">
-                  <tr className="bg-slate-900/10">
-                    <td className="px-4 py-3 font-semibold text-white">Receita Líquida (Total Geral)</td>
-                    <td className="px-4 py-3 text-right font-semibold text-white">
-                      {mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 pl-8 text-slate-300">Total Pago</td>
-                    <td className="px-4 py-3 text-right text-atend-verde font-medium">
-                      {mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 pl-8 text-slate-300">Total Pendente</td>
-                    <td className="px-4 py-3 text-right text-amber-400 font-medium">
-                      {mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}
-                    </td>
-                  </tr>
-                  <tr className="border-t-2 border-atend-border/80">
-                    <td className="px-4 py-3 font-semibold text-white">Boletos no Mês</td>
-                    <td className="px-4 py-3 text-right font-semibold text-white">{mensal?.total_boletos || 0}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {porCategoria.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Por Categoria</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                        <th className="px-4 py-2">Categoria</th>
-                        <th className="px-4 py-2 text-right">Valor</th>
-                        <th className="px-4 py-2 text-right">Qtd</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-atend-border/50 text-sm">
-                      {porCategoria.map((c, i) => (
-                        <tr key={i} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
-                          <td className="px-4 py-2 text-slate-300">{c.categoria}</td>
-                          <td className="px-4 py-2 text-right text-white font-medium">{formatar(c.total)}</td>
-                          <td className="px-4 py-2 text-right text-slate-400">{c.quantidade}x</td>
-                        </tr>
+          <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
+            <AccordionSection indice={1} icone="📊" titulo="Projeção de Fluxo (Previsto)" descricao="Gráfico de barras com fluxo de caixa projetado">
+              {dadosGrafico.length > 0 ? (
+                <div className="w-full overflow-x-auto">
+                  <ResponsiveContainer width={Math.max(dadosGrafico.length * 120, 400)} height={320}>
+                    <BarChart data={dadosGrafico} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                      <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        contentStyle={{ background: 'var(--c-tooltip-bg, #1e293b)', border: '1px solid var(--c-tooltip-border, #334155)', borderRadius: 8, color: 'var(--c-tooltip-color, #f1f5f9)', fontSize: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
+                        formatter={(value) => formatar(value)}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                      {categoriasGrafico.map((cat, i) => (
+                        <Bar key={cat} dataKey={cat} stackId="a" fill={CORES[i % CORES.length]} radius={[4, 4, 0, 0]} />
                       ))}
-                    </tbody>
-                  </table>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic py-2">Nenhum dado disponível para projeção.</p>
+              )}
+            </AccordionSection>
+
+            <AccordionSection indice={2} icone="📈" titulo="Evolução Mensal (12 meses)" descricao="Comparativo de pagos vs pendentes ao longo do ano">
+              {evolucao.length > 0 ? (
+                <div className="w-full overflow-x-auto">
+                  <ResponsiveContainer width="100%" height={320}>
+                    <LineChart data={evolucao} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="mes" tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={(v) => { const [a, m] = v.split('-'); return `${m}/${a.slice(2)}`; }} />
+                      <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        contentStyle={{ background: 'var(--c-tooltip-bg, #1e293b)', border: '1px solid var(--c-tooltip-border, #334155)', borderRadius: 8, color: 'var(--c-tooltip-color, #f1f5f9)', fontSize: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
+                        formatter={(value) => formatar(value)}
+                        labelFormatter={(label) => { const [a, m] = label.split('-'); return `${m}/${a}`; }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                      <Line type="monotone" dataKey="pago" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 4 }} name="Pago" />
+                      <Line type="monotone" dataKey="pendente" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }} name="Pendente" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic py-2">Nenhum dado de evolução disponível.</p>
+              )}
+            </AccordionSection>
+
+            <AccordionSection indice={3} icone="📊" titulo="Por Fornecedor / Categoria" descricao="Distribuição de gastos por fornecedor e categoria">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">📊 Por Fornecedor</h4>
+                  {porFornecedor.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic">Nenhum dado no período.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {porFornecedor.map((f, i) => (
+                        <div key={i}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-slate-300 font-medium truncate">{f.fornecedor}</span>
+                            <span className="text-white font-semibold">{formatar(f.total)}</span>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-atend-verde to-emerald-400 transition-all duration-500"
+                              style={{ width: `${(f.total / maxTotal) * 100}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">🏷️ Por Categoria</h4>
+                  {porCategoria.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic">Nenhuma categoria no período.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {porCategoria.map((c, i) => {
+                        const maxCat = Math.max(...porCategoria.map((x) => x.total), 1);
+                        return (
+                          <div key={i}>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-slate-300 font-medium">{c.categoria}</span>
+                              <span className="text-white font-semibold">{formatar(c.total)} ({c.quantidade}x)</span>
+                            </div>
+                            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                              <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400 transition-all duration-500"
+                                style={{ width: `${(c.total / maxCat) * 100}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
+            </AccordionSection>
+
+            <AccordionSection indice={4} icone="📋" titulo="Demonstrativo do Resultado (DRE)" descricao="Resumo financeiro do período">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs text-slate-400">Receitas e despesas do período</p>
+                <button onClick={exportarPDF} disabled={exportando}
+                  className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all duration-200">
+                  {exportando ? 'Exportando...' : 'Exportar PDF'}
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                      <th className="px-4 py-3">Conta</th>
+                      <th className="px-4 py-3 text-right">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-atend-border/50 text-sm">
+                    <tr className="bg-slate-900/10">
+                      <td className="px-4 py-3 font-semibold text-white">Receita Líquida (Total Geral)</td>
+                      <td className="px-4 py-3 text-right font-semibold text-white">
+                        {mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 pl-8 text-slate-300">Total Pago</td>
+                      <td className="px-4 py-3 text-right text-atend-verde font-medium">
+                        {mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 pl-8 text-slate-300">Total Pendente</td>
+                      <td className="px-4 py-3 text-right text-amber-400 font-medium">
+                        {mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}
+                      </td>
+                    </tr>
+                    <tr className="border-t-2 border-atend-border/80">
+                      <td className="px-4 py-3 font-semibold text-white">Boletos no Mês</td>
+                      <td className="px-4 py-3 text-right font-semibold text-white">{mensal?.total_boletos || 0}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {porCategoria.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Por Categoria</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                          <th className="px-4 py-2">Categoria</th>
+                          <th className="px-4 py-2 text-right">Valor</th>
+                          <th className="px-4 py-2 text-right">Qtd</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-atend-border/50 text-sm">
+                        {porCategoria.map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
+                            <td className="px-4 py-2 text-slate-300">{c.categoria}</td>
+                            <td className="px-4 py-2 text-right text-white font-medium">{formatar(c.total)}</td>
+                            <td className="px-4 py-2 text-right text-slate-400">{c.quantidade}x</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </AccordionSection>
           </div>
         </>
       )}
     </div>
   );
-}
-
-function exportarPDF() {
-  const token = localStorage.getItem('token');
-  const ano = new Date().getFullYear();
-  const mes = new Date().getMonth() + 1;
-  const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase());
-
-  apiFetch(`/relatorio/mensal?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } })
-    .then((r) => r.ok ? r.json() : null)
-    .then((mensal) => {
-      apiFetch(`/relatorio/categorias?ano=${ano}&mes=${mes}`, { headers: { 'Authorization': `Bearer ${token}` } })
-        .then((r) => r.ok ? r.json() : [])
-        .then((cats) => {
-          const doc = new jsPDF();
-          const paginas = doc.internal.getNumberOfPages();
-          const largura = doc.internal.pageSize.getWidth();
-
-          doc.setFontSize(18);
-          doc.setTextColor(46, 204, 113);
-          doc.text('AutoShop Payables', largura / 2, 20, { align: 'center' });
-
-          doc.setFontSize(14);
-          doc.setTextColor(15, 23, 42);
-          doc.text(`DRE - ${nomeMes} ${ano}`, largura / 2, 30, { align: 'center' });
-
-          const formatar = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-          const totalGeral = mensal ? mensal.total_pago + mensal.total_pendente : 0;
-          const totalPago = mensal ? mensal.total_pago : 0;
-          const totalPendente = mensal ? mensal.total_pendente : 0;
-          const totalBoletos = mensal ? mensal.total_boletos : 0;
-
-          doc.autoTable({
-            startY: 40,
-            head: [['Conta', 'Valor']],
-            body: [
-              ['Receita Líquida (Total Geral)', formatar(totalGeral)],
-              ['  Total Pago', formatar(totalPago)],
-              ['  Total Pendente', formatar(totalPendente)],
-              ['Boletos no Mês', String(totalBoletos)],
-            ],
-            headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
-            bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
-            alternateRowStyles: { fillColor: [30, 41, 59] },
-            styles: { fillColor: [15, 23, 42], halign: 'left' },
-            columnStyles: { 1: { halign: 'right' } },
-          });
-
-          if (Array.isArray(cats) && cats.length > 0) {
-            const catBody = cats.map((c) => [c.categoria, formatar(c.total), String(c.quantidade)]);
-            doc.autoTable({
-              startY: doc.lastAutoTable.finalY + 10,
-              head: [['Categoria', 'Valor', 'Qtd']],
-              body: catBody,
-              headStyles: { fillColor: [46, 204, 113], textColor: [10, 10, 10], fontStyle: 'bold', fontSize: 10 },
-              bodyStyles: { textColor: [255, 255, 255], fontSize: 9 },
-              alternateRowStyles: { fillColor: [30, 41, 59] },
-              styles: { fillColor: [15, 23, 42], halign: 'left' },
-              columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
-            });
-          }
-
-          doc.save(`DRE-${nomeMes}-${ano}.pdf`);
-        });
-    });
 }
 
 export default RelatoriosPage;
