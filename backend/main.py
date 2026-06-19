@@ -79,6 +79,7 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 EMAIL_TO_BACKUP = os.getenv("EMAIL_TO_BACKUP", "")
 BACKUP_SCHEDULED = os.getenv("BACKUP_SCHEDULED", "false").lower() == "true"
 
+# === SCHEMAS / MODELOS ===
 class UsuarioCreate(BaseModel):
     nome: str
     sexo: str
@@ -191,6 +192,7 @@ class ModeloRecorrenteCreate(BaseModel):
 class CriarLoteInput(BaseModel):
     boletos: list[BoletoCreate]
 
+# === DEPENDENCIES / SECURITY ===
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 ALGORITHM = "HS256"
 
@@ -257,6 +259,7 @@ def registrar_auditoria(acao, entidade, entidade_id, usuario_id, detalhes=""):
     except Exception:
         pass
 
+# === ROTAS PÚBLICAS ===
 @app.get("/")
 def root():
     return {"mensagem": "API Financeiro Atend-Car rodando!", "docs": "/docs"}
@@ -346,6 +349,7 @@ def alterar_senha(dados: AlterarSenha, usuario: dict = Depends(get_usuario_logad
     conexao.close()
     return {"mensagem": "Senha alterada com sucesso!"}
 
+# === ROTAS ADMINISTRATIVAS ===
 @app.get("/admin/usuarios/")
 def listar_usuarios(admin: dict = Depends(get_current_admin_user)):
     conexao = get_connection()

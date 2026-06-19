@@ -72,6 +72,16 @@ body {
 [data-theme="light"] .bg-slate-900\/30 { background-color: #f8fafc; }
 [data-theme="light"] .bg-slate-900\/40 { background-color: #f1f5f9; }
 [data-theme="light"] .bg-slate-900\/50 { background-color: #eef2f6; }
+[data-theme="light"] .bg-slate-900\/5 { background-color: #f8fafc; }
+
+[data-theme="light"] .bg-rose-500\/20 { background-color: #fecdd3; }
+[data-theme="light"] .bg-rose-600\/10 { background-color: #ffe4e6; }
+[data-theme="light"] .hover\:bg-rose-600\/20:hover { background-color: #fecdd3; }
+[data-theme="light"] .text-rose-500 { color: #e11d48; }
+
+[data-theme="light"] .hover\:bg-slate-700:hover { background-color: #e2e8f0; }
+[data-theme="light"] .hover\:text-white:hover { color: #1e293b; }
+[data-theme="light"] .text-slate-100 { color: #1e293b; }
 
 [data-theme="light"] .border-slate-700 { border-color: #e2e8f0; }
 [data-theme="light"] .divide-atend-border\/50 > * { border-color: #e2e8f0; }

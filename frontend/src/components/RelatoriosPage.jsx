@@ -8,6 +8,7 @@ import html2canvas from 'html2canvas';
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
 function RelatoriosPage({ mostrarToast }) {
+  // === STATES ===
   const agora = new Date();
   const [ano, setAno] = useState(agora.getFullYear());
   const [mes, setMes] = useState(agora.getMonth() + 1);
@@ -22,7 +23,9 @@ function RelatoriosPage({ mostrarToast }) {
   const [evolucao, setEvolucao] = useState([]);
   const [secaoAberta, setSecaoAberta] = useState(null);
   const [exportando, setExportando] = useState(false);
+const [pdfPronto, setPdfPronto] = useState(null);
 
+  // === EFFECTS / API ===
   const fetchRelatorio = async () => {
     setCarregando(true);
     const token = localStorage.getItem('token');
@@ -99,6 +102,7 @@ function RelatoriosPage({ mostrarToast }) {
     </div>
   );
 
+  // === EXPORT PDF ===
   const exportarPDF = async () => {
     setExportando(true);
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -355,7 +359,7 @@ function RelatoriosPage({ mostrarToast }) {
           y = cry + 8;
         }
 
-        // ── Resumo Executivo ──
+        // === RESUMO EXECUTIVO ===
         const resumoH = 10 + 4 * dataRowH + 6;
         checkPageBreak(resumoH + 14);
         const maxCatName = maiorCat?.categoria || '—';
@@ -384,7 +388,7 @@ function RelatoriosPage({ mostrarToast }) {
 
         y = ry + 8;
 
-        // ── Gráfico de Projeção ──
+        // === GRÁFICO DE PROJEÇÃO ===
         const chartEl = document.getElementById('chart-pdf-projecao');
         if (chartEl) {
           try {
@@ -405,7 +409,7 @@ function RelatoriosPage({ mostrarToast }) {
           } catch {}
         }
 
-        // ── Footer ──
+        // === FOOTER ===
         y = Math.max(y, ph - 20);
         doc.setDrawColor(42, 45, 58);
         doc.setLineWidth(0.3);
@@ -423,12 +427,8 @@ function RelatoriosPage({ mostrarToast }) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
         if (pdfWindow && !pdfWindow.closed) {
           pdfWindow.location.href = pdfUrl;
-        } else if (navigator.share) {
-          try {
-            await navigator.share({
-              files: [new File([pdfBlob], `DRE-${nomeMes}-${ano}.pdf`, { type: 'application/pdf' })],
-            });
-          } catch {} finally { URL.revokeObjectURL(pdfUrl); return; }
+        } else if (isSafari) {
+          setPdfPronto({ url: pdfUrl, nome: `DRE-${nomeMes}-${ano}.pdf` });
         } else {
           const link = document.createElement('a');
           link.href = pdfUrl;
@@ -436,8 +436,8 @@ function RelatoriosPage({ mostrarToast }) {
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+          setTimeout(() => { URL.revokeObjectURL(pdfUrl); }, 10000);
         }
-        setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
         mostrarToast?.('PDF exportado com sucesso!');
       } catch (e) {
         mostrarToast?.('Erro ao gerar PDF: ' + e.message, 'erro');
@@ -449,27 +449,28 @@ function RelatoriosPage({ mostrarToast }) {
     }
   };
 
+  // === RENDER ===
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 flex-wrap">
         <h2 className="text-xl font-bold text-white">Relatório {nomeMes} {ano}</h2>
         <select value={mes} onChange={(e) => { setMes(Number(e.target.value)); setDiaInicio(''); setDiaFim(''); }}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
             <option key={m} value={m}>{new Date(ano, m - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase())}</option>
           ))}
         </select>
         <select value={ano} onChange={(e) => setAno(Number(e.target.value))}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
           {[agora.getFullYear(), agora.getFullYear() - 1].map((a) => (<option key={a} value={a}>{a}</option>))}
         </select>
         <select value={diaInicio} onChange={(e) => setDiaInicio(e.target.value)}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
           <option value="">De</option>
           {dias.map((d) => (<option key={d} value={d}>Dia {d}</option>))}
         </select>
         <select value={diaFim} onChange={(e) => setDiaFim(e.target.value)}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 transition-all duration-200">
+          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
           <option value="">Até</option>
           {dias.map((d) => (<option key={d} value={d}>Dia {d}</option>))}
         </select>
@@ -680,6 +681,28 @@ function RelatoriosPage({ mostrarToast }) {
             </AccordionSection>
           </div>
         </>
+      )}
+
+      {pdfPronto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="fixed inset-0 bg-black/60" onClick={() => { URL.revokeObjectURL(pdfPronto.url); setPdfPronto(null); }} />
+          <div className="relative w-full max-w-sm bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 animate-fade-in-scale">
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
+            <div className="flex justify-between items-center mb-5 mt-1">
+              <h2 className="text-lg font-bold text-white">PDF Pronto</h2>
+              <button onClick={() => { URL.revokeObjectURL(pdfPronto.url); setPdfPronto(null); }}
+                className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
+            </div>
+            <p className="text-sm text-slate-400 mb-2">Seu relatório foi gerado com sucesso.</p>
+            <p className="text-xs text-slate-500 mb-6 truncate">{pdfPronto.nome}</p>
+            <a href={pdfPronto.url} target="_blank" rel="noopener noreferrer"
+              onClick={() => setTimeout(() => { URL.revokeObjectURL(pdfPronto.url); setPdfPronto(null); }, 5000)}
+              className="w-full flex items-center justify-center gap-2 bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold py-3 rounded-xl transition-all duration-200 shadow-lg shadow-atend-verde/10">
+              📄 Abrir PDF
+            </a>
+            <p className="text-xs text-slate-500 text-center mt-3">Toque em "Abrir" e depois no ícone de salvar 📥</p>
+          </div>
+        </div>
       )}
     </div>
   );

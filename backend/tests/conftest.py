@@ -73,7 +73,7 @@ def mock_smtp():
         yield mock
 
 
-# ── helpers ───────────────────────────────────────────────────────────
+# === HELPERS ===
 
 def _conectar():
     c = psycopg2.connect(DATABASE_URL)

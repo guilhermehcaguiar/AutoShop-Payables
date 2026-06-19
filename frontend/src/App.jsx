@@ -14,6 +14,7 @@ import MetasPage from './components/MetasPage';
 import { SkeletonLinha, SkeletonCard } from './components/Skeleton';
 
 function App() {
+  // === STATES ===
   const [estaLogado, setEstaLogado] = useState(false);
   const [username, setUsername] = useState('');
   const [senha, setSenha] = useState('');
@@ -43,6 +44,7 @@ function App() {
   const [pg, setPg] = useState(1);
   const porPg = 50;
 
+  // === EFFECTS / API ===
   useEffect(() => {
     const root = document.documentElement;
     if (tema === 'system') {
@@ -116,6 +118,7 @@ function App() {
     }
   }, [fetchBoletos]);
 
+  // === HANDLERS ===
   const lidarComLogin = async (e) => {
     e.preventDefault();
     setErro('');
@@ -238,7 +241,7 @@ function App() {
     });
   };
 
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = new Date().toLocaleDateString('en-CA');
 
   const fornecedoresDisponiveis = useMemo(() => {
     const set = new Set();
@@ -381,6 +384,7 @@ function App() {
     setConfirmExcluir({ aberto: true, boletoId });
   };
 
+  // === SUB-COMPONENTS ===
   const TabelaBoletos = () => (
     <>
       <div className="px-5 py-4 border-b border-atend-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -428,7 +432,7 @@ function App() {
             <select
               value={mesSelecionado}
               onChange={(e) => { setMesSelecionado(e.target.value); setSelecionados(new Set()); }}
-              className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
+              className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer active:scale-[0.98] bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
               style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}
             >
               {meses.map(({ valor, rotulo }) => (
@@ -441,7 +445,7 @@ function App() {
           {diasDisponiveis.length > 0 && (
             <div className="relative">
               <select value={filtroDia} onChange={(e) => setFiltroDia(e.target.value)}
-                className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
+                className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer active:scale-[0.98] bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}>
                 <option value="">Dia</option>
                 {diasDisponiveis.map((d) => (
@@ -454,7 +458,7 @@ function App() {
 
           <div className="relative flex-1 min-w-[140px] max-w-[200px]">
             <select value={filtroFornecedor} onChange={(e) => setFiltroFornecedor(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer transition-all duration-200">
+              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer active:scale-[0.98] transition-all duration-200">
               <option value="">Todos fornecedores</option>
               {fornecedoresDisponiveis.map((f) => (
                 <option key={f} value={f}>{f}</option>
@@ -626,6 +630,7 @@ function App() {
     </>
   );
 
+  // === RENDER SUB-COMPONENTS ===
   const PaginaPerfil = () => {
     const [senhaAtual, setSenhaAtual] = useState('');
     const [senhaNova, setSenhaNova] = useState('');

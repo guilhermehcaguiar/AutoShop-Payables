@@ -147,7 +147,7 @@ function FornecedoresPage({ mostrarToast }) {
             <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
             <div className="flex justify-between items-center mb-6 mt-1">
               <h2 className="text-lg font-bold text-white">{editando ? 'Editar' : 'Novo'} Fornecedor</h2>
-              <button onClick={() => setModalAberto(false)} className="text-slate-500 hover:text-white text-xl">&times;</button>
+              <button onClick={() => setModalAberto(false)} className="text-slate-500 hover:text-white text-xl active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
             </div>
             <form onSubmit={salvar} className="space-y-4">
               <div>

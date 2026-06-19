@@ -18,7 +18,7 @@ function Toast({ mensagem, tipo, visivel, onFechar }) {
       <div className={`${bgColor} text-white text-sm font-medium px-5 py-3 rounded-lg shadow-2xl flex items-center gap-2.5 max-[480px]:w-full max-[480px]:justify-between`}>
         <span>{icone}</span>
         <span>{mensagem}</span>
-        <button onClick={onFechar} className="ml-3 opacity-60 hover:opacity-100 text-lg leading-none">&times;</button>
+        <button onClick={onFechar} className="ml-3 opacity-60 hover:opacity-100 text-lg leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
       </div>
     </div>
   );

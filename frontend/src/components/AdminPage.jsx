@@ -30,7 +30,7 @@ function AdminPage({ mostrarToast }) {
 
   const getCatName = (c) => typeof c === 'string' ? c : (c.categoria || c.nome || '');
 
-  // ── Módulo 1: Gerenciar Usuários ──
+  // === MÓDULO 1: GERENCIAR USUÁRIOS ===
   const [usuarios, setUsuarios] = useState([]);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nome: '', username: '' });
@@ -106,7 +106,7 @@ function AdminPage({ mostrarToast }) {
     finally { setCarregandoCriar(false); }
   };
 
-  // ── Módulo 2: Moderação de Categorias ──
+  // === MÓDULO 2: MODERAÇÃO DE CATEGORIAS ===
   const [categorias, setCategorias] = useState([]);
   const [editandoCategoria, setEditandoCategoria] = useState(null);
   const [novoNomeCategoria, setNovoNomeCategoria] = useState('');
@@ -146,7 +146,7 @@ function AdminPage({ mostrarToast }) {
     } catch { mostrarToast('Erro ao mesclar', 'erro'); }
   };
 
-  // ── Módulo 3: Teto de Gastos ──
+  // === MÓDULO 3: TETO DE GASTOS ===
   const [categoriasMeta, setCategoriasMeta] = useState([]);
   const [limites, setLimites] = useState({});
 
@@ -190,7 +190,7 @@ function AdminPage({ mostrarToast }) {
     } catch { mostrarToast('Erro ao salvar', 'erro'); }
   };
 
-  // ── Módulo 4: Central de Backup ──
+  // === MÓDULO 4: CENTRAL DE BACKUP ===
   const [backupAtivo, setBackupAtivo] = useState(null);
   const [smtpConfigurado, setSmtpConfigurado] = useState(false);
   const [executandoBackup, setExecutandoBackup] = useState(false);
@@ -317,7 +317,7 @@ function AdminPage({ mostrarToast }) {
     }
   };
 
-  // ── Módulo 5: Meta vs Gasto ──
+  // === MÓDULO 5: META VS GASTO ===
   const [metaGasto, setMetaGasto] = useState([]);
   const [carregandoMeta, setCarregandoMeta] = useState(false);
 
@@ -347,7 +347,7 @@ function AdminPage({ mostrarToast }) {
 
   useEffect(() => { if (moduloAberto === 5) fetchMetaGasto(); }, [moduloAberto]);
 
-  // ── Módulo 6: Boletos Excluídos ──
+  // === MÓDULO 6: BOLETOS EXCLUÍDOS ===
   const [excluidos, setExcluidos] = useState([]);
   const [carregandoExcluidos, setCarregandoExcluidos] = useState(false);
 
@@ -375,7 +375,7 @@ function AdminPage({ mostrarToast }) {
     } catch { mostrarToast('Erro ao recuperar', 'erro'); }
   };
 
-  // ── Módulo 7: Modelos Recorrentes ──
+  // === MÓDULO 7: MODELOS RECORRENTES ===
   const [recorrentes, setRecorrentes] = useState([]);
   const [carregandoRecorrentes, setCarregandoRecorrentes] = useState(false);
 
@@ -410,7 +410,7 @@ function AdminPage({ mostrarToast }) {
         <p className="text-xs text-slate-400">Apenas administradores têm acesso a esta tela</p>
       </div>
 
-      {/* ────────── MÓDULO 1 ────────── */}
+      {/* === MÓDULO 1 === */}
       <AccordionSection indice={1} icone="📁" titulo="Gerenciar Usuários" descricao="Cadastro e permissões de usuários">
         <div className="mb-3 mt-1 flex justify-end">
           <button onClick={() => setCriando(true)}
@@ -474,18 +474,18 @@ function AdminPage({ mostrarToast }) {
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Editar Usuário</h2>
-                <button onClick={() => setEditando(null)} className="text-slate-500 hover:text-white text-xl active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
+                <button onClick={() => setEditando(null)} className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
               </div>
               <form onSubmit={salvarEdicao} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Nome</label>
                   <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" />
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Username</label>
                   <input type="text" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })}
-                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" />
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" />
                 </div>
                 <button type="submit"
                   className="w-full bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all duration-200">
@@ -503,18 +503,18 @@ function AdminPage({ mostrarToast }) {
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Novo Usuário</h2>
-                <button onClick={() => setCriando(false)} className="text-slate-500 hover:text-white text-xl active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
+                <button onClick={() => setCriando(false)} className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
               </div>
               <form onSubmit={criarUsuario} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Nome</label>
                   <input type="text" value={formCriar.nome} onChange={(e) => setFormCriar({ ...formCriar, nome: e.target.value })}
-                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" required />
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Sexo</label>
                   <select value={formCriar.sexo} onChange={(e) => setFormCriar({ ...formCriar, sexo: e.target.value })}
-                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-all duration-200">
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-all duration-200 active:scale-[0.98]">
                     <option value="M">Masculino</option>
                     <option value="F">Feminino</option>
                   </select>
@@ -522,12 +522,12 @@ function AdminPage({ mostrarToast }) {
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Username</label>
                   <input type="text" value={formCriar.username} onChange={(e) => setFormCriar({ ...formCriar, username: e.target.value })}
-                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" required />
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Senha</label>
                   <input type="password" value={formCriar.senha} onChange={(e) => setFormCriar({ ...formCriar, senha: e.target.value })}
-                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" required />
+                    className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
                 </div>
                 {erroCriar && <div className="bg-rose-500/10 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erroCriar}</div>}
                 <div className="flex gap-3">
@@ -546,7 +546,7 @@ function AdminPage({ mostrarToast }) {
         )}
       </AccordionSection>
 
-      {/* ────────── MÓDULO 2 ────────── */}
+      {/* === MÓDULO 2 === */}
       <AccordionSection indice={2} icone="📊" titulo="Moderação de Categorias" descricao="Editar ou mesclar categorias de boletos">
         <div className="mt-1 space-y-2">
           {categorias.length === 0 && (
@@ -581,7 +581,7 @@ function AdminPage({ mostrarToast }) {
         </div>
       </AccordionSection>
 
-      {/* ────────── MÓDULO 3 ────────── */}
+      {/* === MÓDULO 3 === */}
       <AccordionSection indice={3} icone="📈" titulo="Teto de Gastos" descricao="Definir limites mensais por categoria">
         <div className="mt-1 space-y-2">
           {categoriasMeta.length === 0 && (
@@ -609,7 +609,7 @@ function AdminPage({ mostrarToast }) {
         </div>
       </AccordionSection>
 
-      {/* ────────── MÓDULO 4 ────────── */}
+      {/* === MÓDULO 4 === */}
       <AccordionSection indice={4} icone="⚙️" titulo="Central de Backup" descricao="Exportar, importar e gerenciar dados">
         <div className="mt-1 space-y-4">
           {/* Baixar Cópia */}
@@ -692,7 +692,7 @@ function AdminPage({ mostrarToast }) {
         />
       </AccordionSection>
 
-      {/* ────────── MÓDULO 5 ────────── */}
+      {/* === MÓDULO 5 === */}
       <AccordionSection indice={5} icone="💰" titulo="Meta vs Gasto" descricao="Comparativo do mês atual por categoria">
         <div className="mt-1 space-y-2">
           {carregandoMeta ? (
@@ -722,7 +722,7 @@ function AdminPage({ mostrarToast }) {
         </div>
       </AccordionSection>
 
-      {/* ────────── MÓDULO 6 ────────── */}
+      {/* === MÓDULO 6 === */}
       <AccordionSection indice={6} icone="🗑" titulo="Boletos Excluídos" descricao="Recuperar boletos deletados">
         <div className="mt-1 space-y-2">
           {carregandoExcluidos ? (
@@ -763,7 +763,7 @@ function AdminPage({ mostrarToast }) {
         </div>
       </AccordionSection>
 
-      {/* ────────── MÓDULO 7 ────────── */}
+      {/* === MÓDULO 7 === */}
       <AccordionSection indice={7} icone="🔄" titulo="Modelos Recorrentes" descricao="Gerenciar boletos recorrentes">
         <div className="mt-1 space-y-2">
           {carregandoRecorrentes ? (

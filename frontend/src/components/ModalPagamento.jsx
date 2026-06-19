@@ -54,7 +54,7 @@ function ModalPagamento({ aberto, boleto, onFechar, onConfirmado }) {
         <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
         <div className="flex justify-between items-center mb-6 mt-1">
           <h2 className="text-lg font-bold text-white">Confirmar Pagamento</h2>
-          <button onClick={onFechar} className="text-slate-500 hover:text-white text-xl leading-none">&times;</button>
+          <button onClick={onFechar} className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
         </div>
 
         <div className="space-y-4">
@@ -80,7 +80,7 @@ function ModalPagamento({ aberto, boleto, onFechar, onConfirmado }) {
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Método de Pagamento</label>
             <select value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors">
+              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors active:scale-[0.98]">
               <option value="">Selecione...</option>
               <option value="Pix">Pix</option>
               <option value="Transferência">Transferência</option>
