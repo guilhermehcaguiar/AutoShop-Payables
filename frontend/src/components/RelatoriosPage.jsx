@@ -101,6 +101,12 @@ function RelatoriosPage({ mostrarToast }) {
 
   const exportarPDF = async () => {
     setExportando(true);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
+    let pdfWindow = null;
+    if (isSafari) {
+      pdfWindow = window.open('', '_blank');
+      if (pdfWindow) pdfWindow.document.write('Carregando PDF...');
+    }
     try {
       const pdfParams = new URLSearchParams({ ano, mes });
       if (diaInicio) pdfParams.set('dia_inicio', diaInicio);
@@ -231,18 +237,18 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(148, 163, 184);
-        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 8, { align: 'center' });
+        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 11, { align: 'center' });
 
         doc.setDrawColor(46, 204, 113);
         doc.setLineWidth(0.4);
-        doc.line(ml + 8, titleY + 11, ml + cw - 8, titleY + 11);
+        doc.line(ml + 8, titleY + 14, ml + cw - 8, titleY + 14);
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);
         doc.setTextColor(46, 204, 113);
-        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 17, { align: 'center' });
+        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 20, { align: 'center' });
 
-        y = titleY + 22;
+        y = titleY + 25;
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
@@ -254,13 +260,6 @@ function RelatoriosPage({ mostrarToast }) {
         doc.text(`Emissão: ${dataEmissao}`, ml, y);
         doc.text(`Período: ${periodoLabel}`, ml + cw, y, { align: 'right' });
 
-        if (mesAnterior) {
-          const seta = diffTotal >= 0 ? '▲' : '▼';
-          const cor = diffTotal >= 0 ? '46,204,113' : '244,63,94';
-          doc.setTextColor(...cor.split(',').map(Number));
-          doc.setFontSize(6.5);
-          doc.text(`${seta} ${diffTotal >= 0 ? '+' : ''}${fmt(diffTotal)} (${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(1)}%) vs mês anterior`, centerX, y + 4, { align: 'center' });
-        }
         y += 7;
 
         sectionTitle('Demonstrativo do Resultado', y);
@@ -422,12 +421,14 @@ function RelatoriosPage({ mostrarToast }) {
 
         const pdfBlob = doc.output('blob');
         const pdfUrl = URL.createObjectURL(pdfBlob);
-        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
-        if (isSafari && navigator.share) {
-          const file = new File([pdfBlob], `DRE-${nomeMes}-${ano}.pdf`, { type: 'application/pdf' });
-          navigator.share({ files: [file] }).catch(() => {});
-        } else if (isSafari) {
-          window.open(pdfUrl, '_blank');
+        if (pdfWindow && !pdfWindow.closed) {
+          pdfWindow.location.href = pdfUrl;
+        } else if (navigator.share) {
+          try {
+            await navigator.share({
+              files: [new File([pdfBlob], `DRE-${nomeMes}-${ano}.pdf`, { type: 'application/pdf' })],
+            });
+          } catch {} finally { URL.revokeObjectURL(pdfUrl); return; }
         } else {
           const link = document.createElement('a');
           link.href = pdfUrl;
