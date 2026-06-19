@@ -142,7 +142,7 @@ function RelatoriosPage({ mostrarToast }) {
 
       const pw = doc.internal.pageSize.getWidth();
       const ph = doc.internal.pageSize.getHeight();
-      const ml = 14, mr = 14, cw = pw - ml - mr;
+      const ml = 12, mr = 12, cw = pw - ml - mr;
       const fmt = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
       const BG = '#0f1117', CARD = '#1a1d27', BORDER = '#2a2d3a', GREEN = '#2ecc71';
       let y = 0;
@@ -188,12 +188,11 @@ function RelatoriosPage({ mostrarToast }) {
 
         pageBg();
 
-        y = 24;
-        card(ml, cw, 105, y);
+        y = 16;
+        card(ml, cw, 60, y);
 
         const centerX = pw / 2;
-        const titleY = y + 18;
-        const sonicSize = 22;
+        const titleY = y + 10;
 
         const fullTitle = 'ATEND-CAR';
         await document.fonts.ready;
@@ -204,7 +203,7 @@ function RelatoriosPage({ mostrarToast }) {
         const ctx = canvas.getContext('2d');
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'center';
-        const sonicPx = 72;
+        const sonicPx = 60;
         ctx.font = `${sonicPx}px 'Sonic Extra Bold', 'Segoe UI', sans-serif`;
         const metrics = ctx.measureText(fullTitle);
         const imgW = metrics.width;
@@ -224,29 +223,29 @@ function RelatoriosPage({ mostrarToast }) {
         ctx.fillStyle = '#ffffff';
         ctx.fillText(fullTitle, cx, cy);
         const imgData = canvas.toDataURL('image/png');
-        const pdfImgH = 18;
+        const pdfImgH = 13;
         const pdfImgW = (canvas.width / canvas.height) * pdfImgH;
         const titleX = centerX - pdfImgW / 2;
         doc.addImage(imgData, 'PNG', titleX, titleY - pdfImgH / 2, pdfImgW, pdfImgH);
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
+        doc.setFontSize(8);
         doc.setTextColor(148, 163, 184);
-        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 13, { align: 'center' });
+        doc.text('SISTEMA DE GERENCIAMENTO FINANCEIRO', centerX, titleY + 8, { align: 'center' });
 
         doc.setDrawColor(46, 204, 113);
-        doc.setLineWidth(0.5);
-        doc.line(ml + 10, titleY + 20, ml + cw - 10, titleY + 20);
+        doc.setLineWidth(0.4);
+        doc.line(ml + 8, titleY + 11, ml + cw - 8, titleY + 11);
 
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(14);
+        doc.setFontSize(12);
         doc.setTextColor(46, 204, 113);
-        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 33, { align: 'center' });
+        doc.text(`DRE - ${nomeMes.toUpperCase()} ${ano}`, centerX, titleY + 17, { align: 'center' });
 
-        y = titleY + 44;
+        y = titleY + 22;
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor(100, 116, 139);
         const dataEmissao = new Date().toLocaleDateString('pt-BR');
         const periodoLabel = diaInicio && diaFim
@@ -259,19 +258,20 @@ function RelatoriosPage({ mostrarToast }) {
           const seta = diffTotal >= 0 ? '▲' : '▼';
           const cor = diffTotal >= 0 ? '46,204,113' : '244,63,94';
           doc.setTextColor(...cor.split(',').map(Number));
-          doc.text(`${seta} ${diffTotal >= 0 ? '+' : ''}${fmt(diffTotal)} (${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(1)}%) vs mês anterior`, centerX, y + 5, { align: 'center' });
+          doc.setFontSize(6.5);
+          doc.text(`${seta} ${diffTotal >= 0 ? '+' : ''}${fmt(diffTotal)} (${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(1)}%) vs mês anterior`, centerX, y + 4, { align: 'center' });
         }
-        y += 12;
+        y += 7;
 
         sectionTitle('Demonstrativo do Resultado', y);
-        y += 16;
+        y += 11;
 
-        const headerRowH = 8;
-        const dataRowH = 8;
+        const headerRowH = 6;
+        const dataRowH = 6;
 
-        const dreContentH = headerRowH + 3 * dataRowH + 2 + dataRowH + 6;
+        const dreContentH = headerRowH + 3 * dataRowH + 2 + dataRowH + 4;
         card(ml, cw, dreContentH, y);
-        const ty = y + 4;
+        const ty = y + 3;
 
         const innerX = ml + 4;
         const innerW = cw - 8;
@@ -279,10 +279,10 @@ function RelatoriosPage({ mostrarToast }) {
         doc.setFillColor(46, 204, 113);
         doc.rect(innerX, ty, innerW, headerRowH, 'F');
         doc.setTextColor(10, 10, 10);
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
-        doc.text('Descrição', innerX + colPad, ty + 5);
-        doc.text('Valor', innerX + innerW - colPad, ty + 5, { align: 'right' });
+        doc.text('Descrição', innerX + colPad, ty + 4);
+        doc.text('Valor', innerX + innerW - colPad, ty + 4, { align: 'right' });
 
         let ry = ty + headerRowH;
         const dreRows = [
@@ -294,76 +294,77 @@ function RelatoriosPage({ mostrarToast }) {
           doc.setFillColor(isAlt ? 26 : 22, isAlt ? 29 : 26, isAlt ? 39 : 36);
           doc.rect(innerX, ry, innerW, dataRowH, 'F');
           doc.setTextColor(isBold ? 255 : 220, isBold ? 255 : 220, isBold ? 255 : 220);
-          doc.setFontSize(8);
+          doc.setFontSize(7);
           doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-          doc.text(label, innerX + colPad, ry + 5.5);
-          doc.text(value, innerX + innerW - colPad, ry + 5.5, { align: 'right' });
+          doc.text(label, innerX + colPad, ry + 4);
+          doc.text(value, innerX + innerW - colPad, ry + 4, { align: 'right' });
           ry += dataRowH;
         });
 
         doc.setDrawColor(46, 204, 113);
         doc.setLineWidth(0.3);
         doc.line(innerX, ry, innerX + innerW, ry);
-        ry += 3;
+        ry += 2;
 
         doc.setFillColor(26, 29, 39);
         doc.rect(innerX, ry, innerW, dataRowH, 'F');
         doc.setTextColor(46, 204, 113);
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
-        doc.text('Boletos no Mês', innerX + colPad, ry + 5.5);
-        doc.text(String(m.total_boletos || 0), innerX + innerW - colPad, ry + 5.5, { align: 'right' });
-        ry += dataRowH + 2;
+        doc.text('Boletos no Mês', innerX + colPad, ry + 4);
+        doc.text(String(m.total_boletos || 0), innerX + innerW - colPad, ry + 4, { align: 'right' });
+        ry += dataRowH + 1;
 
-        y = ry + 8;
+        y = ry + 5;
 
         if (Array.isArray(cats) && cats.length > 0) {
-          checkPageBreak(14 + cats.length * dataRowH + 14);
+          checkPageBreak(10 + cats.length * dataRowH + 10);
           sectionTitle('Distribuição por Categoria', y);
-          y += 16;
+          y += 11;
 
           const catRows = Math.ceil(cats.length);
-          const catH = catRows * dataRowH + 14;
+          const catH = catRows * dataRowH + 10;
           card(ml, cw, catH, y);
 
-          const ct = y + 4;
+          const ct = y + 3;
           doc.setFillColor(46, 204, 113);
           doc.rect(innerX, ct, innerW, headerRowH, 'F');
           doc.setTextColor(10, 10, 10);
-          doc.setFontSize(9);
+          doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
           const col1W = innerW * 0.50;
           const col2W = innerW * 0.30;
           const col3W = innerW * 0.20;
           const col2X = innerX + col1W;
           const col3X = col2X + col2W;
-          doc.text('Categoria', innerX + colPad, ct + 5);
-          doc.text('Valor', col2X + col2W - colPad, ct + 5, { align: 'right' });
-          doc.text('Qtd', col3X + col3W - colPad, ct + 5, { align: 'right' });
+          doc.text('Categoria', innerX + colPad, ct + 4);
+          doc.text('Valor', col2X + col2W - colPad, ct + 4, { align: 'right' });
+          doc.text('Qtd', col3X + col3W - colPad, ct + 4, { align: 'right' });
 
           let cry = ct + headerRowH;
           cats.forEach((c, i) => {
             doc.setFillColor(i % 2 === 0 ? 26 : 22, i % 2 === 0 ? 29 : 26, i % 2 === 0 ? 39 : 36);
             doc.rect(innerX, cry, innerW, dataRowH, 'F');
             doc.setTextColor(220, 220, 220);
-            doc.setFontSize(8);
+            doc.setFontSize(7);
             doc.setFont('helvetica', 'normal');
-            doc.text(c.categoria || '—', innerX + colPad, cry + 5.5);
-            doc.text(fmt(Number(c.total) || 0), col2X + col2W - colPad, cry + 5.5, { align: 'right' });
-            doc.text(String(c.quantidade ?? ''), col3X + col3W - colPad, cry + 5.5, { align: 'right' });
+            doc.text(c.categoria || '—', innerX + colPad, cry + 4);
+            doc.text(fmt(Number(c.total) || 0), col2X + col2W - colPad, cry + 4, { align: 'right' });
+            doc.text(String(c.quantidade ?? ''), col3X + col3W - colPad, cry + 4, { align: 'right' });
             cry += dataRowH;
           });
-          y = cry + 12;
+          y = cry + 8;
         }
 
         // ── Resumo Executivo ──
-        checkPageBreak(55);
+        const resumoH = 10 + 4 * dataRowH + 6;
+        checkPageBreak(resumoH + 14);
         const maxCatName = maiorCat?.categoria || '—';
         const maxCatVal = maiorCat?.total ? fmt(Number(maiorCat.total)) : '—';
         sectionTitle('Resumo do Mês', y);
-        y += 16;
-        card(ml, cw, 38, y);
-        const rsY = y + 4;
+        y += 11;
+        card(ml, cw, resumoH, y);
+        const rsY = y + 3;
         const rsRows = [
           ['Total Geral', fmt(totalGeral)],
           ['Média por Dia', fmt(mediaDiaria)],
@@ -375,14 +376,14 @@ function RelatoriosPage({ mostrarToast }) {
           doc.setFillColor(i % 2 === 0 ? 26 : 22, i % 2 === 0 ? 29 : 26, i % 2 === 0 ? 39 : 36);
           doc.rect(innerX, ry, innerW, dataRowH, 'F');
           doc.setTextColor(220, 220, 220);
-          doc.setFontSize(8);
+          doc.setFontSize(7);
           doc.setFont('helvetica', 'normal');
-          doc.text(label, innerX + colPad, ry + 5.5);
-          doc.text(value, innerX + innerW - colPad, ry + 5.5, { align: 'right' });
+          doc.text(label, innerX + colPad, ry + 4);
+          doc.text(value, innerX + innerW - colPad, ry + 4, { align: 'right' });
           ry += dataRowH;
         });
 
-        y = ry + 12;
+        y = ry + 8;
 
         // ── Gráfico de Projeção ──
         const chartEl = document.getElementById('chart-pdf-projecao');
@@ -397,23 +398,23 @@ function RelatoriosPage({ mostrarToast }) {
             const chartImgData = chartCanvas.toDataURL('image/png');
             const chartImgW = cw;
             const chartImgH = (chartCanvas.height / chartCanvas.width) * chartImgW;
-            checkPageBreak(chartImgH + 25);
+            checkPageBreak(chartImgH + 20);
             sectionTitle('Projeção de Fluxo', y);
-            y += 16;
+            y += 11;
             doc.addImage(chartImgData, 'PNG', ml, y, chartImgW, chartImgH);
-            y += chartImgH + 10;
+            y += chartImgH + 8;
           } catch {}
         }
 
         // ── Footer ──
-        y = Math.max(y, ph - 24);
+        y = Math.max(y, ph - 20);
         doc.setDrawColor(42, 45, 58);
         doc.setLineWidth(0.3);
         doc.line(ml, y, ml + cw, y);
-        y += 5;
+        y += 4;
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor(100, 116, 139);
         doc.text('Atend-Car © 2026 — Todos os direitos reservados.', centerX, y, { align: 'center' });
 
@@ -421,12 +422,20 @@ function RelatoriosPage({ mostrarToast }) {
 
         const pdfBlob = doc.output('blob');
         const pdfUrl = URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = pdfUrl;
-        link.download = `DRE-${nomeMes}-${ano}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent);
+        if (isSafari && navigator.share) {
+          const file = new File([pdfBlob], `DRE-${nomeMes}-${ano}.pdf`, { type: 'application/pdf' });
+          navigator.share({ files: [file] }).catch(() => {});
+        } else if (isSafari) {
+          window.open(pdfUrl, '_blank');
+        } else {
+          const link = document.createElement('a');
+          link.href = pdfUrl;
+          link.download = `DRE-${nomeMes}-${ano}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
         setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
         mostrarToast?.('PDF exportado com sucesso!');
       } catch (e) {
