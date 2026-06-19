@@ -191,70 +191,7 @@ function AdminPage({ mostrarToast }) {
   };
 
   // === MÓDULO 4: CENTRAL DE BACKUP ===
-  const [backupAtivo, setBackupAtivo] = useState(null);
-  const [smtpConfigurado, setSmtpConfigurado] = useState(false);
-  const [executandoBackup, setExecutandoBackup] = useState(false);
   const [confirmArquivar, setConfirmArquivar] = useState({ aberto: false, carregando: false });
-
-  const fetchStatusBackup = async () => {
-    try {
-      const resp = await apiFetch('/admin/backup-status', { headers });
-      if (resp.ok) {
-        const data = await resp.json();
-        setBackupAtivo(data.ativo);
-        setSmtpConfigurado(data.smtp_configurado);
-      }
-    } catch {}
-  };
-
-  useEffect(() => { if (moduloAberto === 4) fetchStatusBackup(); }, [moduloAberto]);
-
-  const toggleBackup = async () => {
-    const novoEstado = !backupAtivo;
-    setBackupAtivo(novoEstado);
-    try {
-      const resp = await apiFetch('/admin/backup-toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        setBackupAtivo(data.ativo);
-        mostrarToast(`Backup automático ${data.ativo ? 'ativado' : 'desativado'}!`);
-      } else {
-        setBackupAtivo(!novoEstado);
-        const d = await resp.json();
-        mostrarToast(d.detail || 'Erro', 'erro');
-      }
-    } catch {
-      setBackupAtivo(!novoEstado);
-      mostrarToast('Erro ao alterar backup', 'erro');
-    }
-  };
-
-  const executarBackup = async () => {
-    setExecutandoBackup(true);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
-    try {
-      const resp = await apiFetch('/admin/backup-agendado', { headers, signal: controller.signal });
-      clearTimeout(timeoutId);
-      const data = await resp.json();
-      if (resp.ok) {
-        if (data.email_enviado !== undefined) {
-          mostrarToast(data.email_enviado ? 'Backup enviado por e-mail com sucesso!' : 'Backup gerado, mas falha no envio do e-mail.');
-        } else {
-          mostrarToast(data.mensagem || 'Backup desativado no servidor.', 'erro');
-        }
-      } else {
-        mostrarToast(data.detail || 'Erro ao executar backup', 'erro');
-      }
-    } catch {
-      clearTimeout(timeoutId);
-      mostrarToast('Erro de conexão ou tempo limite excedido', 'erro');
-    }
-    setExecutandoBackup(false);
-  };
 
   const baixarBackup = async () => {
     try {
@@ -634,39 +571,6 @@ function AdminPage({ mostrarToast }) {
               Selecionar
               <input type="file" accept=".json" onChange={restaurarBackup} className="hidden" />
             </label>
-          </div>
-
-          {/* Backup Agendado */}
-          <div className="flex items-center justify-between bg-slate-900/20 rounded-lg px-4 py-3 border border-atend-border/50">
-            <div>
-              <p className="text-sm font-medium text-white">Ativar Backup Semanal Automático</p>
-              <p className="text-xs text-slate-500">
-                Status: {backupAtivo === null ? 'Verificando...' : backupAtivo ? <span className="text-atend-verde">Ativo</span> : <span className="text-slate-400">Inativo</span>}
-                {!smtpConfigurado && backupAtivo !== null && <span className="text-amber-400 ml-2">(SMTP não configurado)</span>}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                role="switch"
-                aria-checked={backupAtivo}
-                onClick={toggleBackup}
-                className={`relative w-14 h-7 rounded-full transition-all duration-300 ease-in-out outline-none focus-visible:ring-2 focus-visible:ring-atend-verde/60 focus-visible:ring-offset-2 focus-visible:ring-offset-atend-bg ${backupAtivo ? 'bg-atend-verde shadow-[0_0_12px_rgba(34,197,94,0.35)]' : 'bg-slate-700 hover:bg-slate-600'}`}
-              >
-                <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ease-out ${backupAtivo ? 'translate-x-7 scale-105' : 'translate-x-0 scale-100'}`} />
-              </button>
-              <button onClick={executarBackup} disabled={executandoBackup || !backupAtivo || !smtpConfigurado}
-                className="relative bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all duration-200 overflow-hidden">
-                {executandoBackup ? (
-                  <span className="flex items-center gap-1.5">
-                    <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    <span>Enviando</span>
-                  </span>
-                ) : 'Executar'}
-              </button>
-            </div>
           </div>
 
           {/* Arquivar / Liberar Espaço */}

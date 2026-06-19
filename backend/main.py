@@ -9,54 +9,14 @@ from jose import JWTError, ExpiredSignatureError, jwt
 import os
 import csv
 import io
-import smtplib
 import json
-import zipfile
-import tempfile
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
-from email.utils import formatdate
 from dotenv import load_dotenv
 from calendar import monthrange
-from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
 migrar()
-
-def backup_job():
-    if not BACKUP_SCHEDULED:
-        print("[BACKUP] BACKUP_SCHEDULED=false, pulando backup agendado.")
-        return
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT valor FROM config WHERE chave = 'backup_auto'")
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        ativo = row and row[0] == 'true'
-        if not ativo:
-            print("[BACKUP] backup_auto desativado na config, pulando.")
-            return
-    except Exception as e:
-        print(f"[BACKUP] Erro ao verificar config: {e}")
-        return
-    if not all([SMTP_SERVER, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO_BACKUP]):
-        print("[BACKUP] SMTP incompleto, pulando backup agendado.")
-        return
-    try:
-        executar_backup_agendado(admin_id=0)
-        print("[BACKUP] Backup automático executado com sucesso.")
-    except Exception as e:
-        print(f"[BACKUP] Erro no backup automático: {e}")
-
-scheduler = BackgroundScheduler()
-scheduler.add_job(backup_job, 'cron', day_of_week='sun', hour=0, minute=0)
-scheduler.start()
 
 app = FastAPI()
 
@@ -70,14 +30,6 @@ app.add_middleware(
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
-SMTP_SERVER = os.getenv("SMTP_SERVER", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-EMAIL_FROM = os.getenv("EMAIL_FROM", "")
-EMAIL_TO_BACKUP = os.getenv("EMAIL_TO_BACKUP", "")
-BACKUP_SCHEDULED = os.getenv("BACKUP_SCHEDULED", "false").lower() == "true"
 
 # === SCHEMAS / MODELOS ===
 class UsuarioCreate(BaseModel):
@@ -992,148 +944,6 @@ def restaurar_backup(payload: BackupPayload, admin: dict = Depends(get_current_a
         raise HTTPException(status_code=500, detail=f"Falha ao restaurar backup: {e}")
     finally:
         conexao.close()
-
-@app.get("/admin/backup-status")
-def backup_status(admin: dict = Depends(get_current_admin_user)):
-    smtp_ok = all([SMTP_SERVER, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO_BACKUP])
-    ativo = False
-    try:
-        conexao = get_connection()
-        cursor = conexao.cursor()
-        cursor.execute("SELECT valor FROM config WHERE chave = 'backup_auto'")
-        row = cursor.fetchone()
-        cursor.close()
-        conexao.close()
-        ativo = row and row[0] == 'true'
-    except:
-        pass
-    return {"ativo": ativo, "smtp_configurado": smtp_ok}
-
-@app.post("/admin/backup-toggle")
-def backup_toggle(admin: dict = Depends(get_current_admin_user)):
-    try:
-        conexao = get_connection()
-        cursor = conexao.cursor()
-        cursor.execute("SELECT valor FROM config WHERE chave = 'backup_auto'")
-        row = cursor.fetchone()
-        novo_valor = "false" if (row and row[0] == 'true') else "true"
-        cursor.execute("UPDATE config SET valor = %s WHERE chave = 'backup_auto'", (novo_valor,))
-        conexao.commit()
-        cursor.close()
-        conexao.close()
-        registrar_auditoria("backup_toggle", "sistema", 0, admin["id"], f"Backup automático alternado para {novo_valor}")
-        return {"ativo": novo_valor == "true"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao alternar backup: {e}")
-
-def executar_backup_agendado(admin_id: int = 0):
-    agora = agora_br()
-    data_str = agora.strftime("%Y-%m-%d_%H-%M-%S")
-    nome_arquivo = f"backup_atendcar_{data_str}.zip"
-
-    conexao = get_connection()
-    cursor = conexao.cursor()
-    cursor.execute(
-        "SELECT id, fornecedor, valor, vencimento, codigo_barras, status, usuario_id, categoria, criado_em, descricao, metodo_pagamento, banco, data_pagamento, pago_por FROM boletos WHERE deletado_em IS NULL"
-    )
-    boletos = cursor.fetchall()
-    colunas_boleto = [desc[0] for desc in cursor.description]
-
-    cursor.execute("SELECT id, nome, cnpj, telefone, email, criado_em FROM fornecedores")
-    fornecedores = cursor.fetchall()
-    colunas_forn = [desc[0] for desc in cursor.description]
-    conexao.close()
-
-    csv_boleto = io.StringIO()
-    writer_boleto = csv.writer(csv_boleto)
-    writer_boleto.writerow(colunas_boleto)
-    for row in boletos:
-        writer_boleto.writerow(row)
-    conteudo_boleto = csv_boleto.getvalue()
-
-    csv_forn = io.StringIO()
-    writer_forn = csv.writer(csv_forn)
-    writer_forn.writerow(colunas_forn)
-    for row in fornecedores:
-        writer_forn.writerow(row)
-    conteudo_forn = csv_forn.getvalue()
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        caminho_zip = os.path.join(tmpdir, nome_arquivo)
-        with zipfile.ZipFile(caminho_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            zipf.writestr("boletos.csv", conteudo_boleto)
-            zipf.writestr("fornecedores.csv", conteudo_forn)
-        with open(caminho_zip, "rb") as f:
-            dados_zip = f.read()
-
-    agora_texto = agora.strftime("%d/%m/%Y")
-    assunto = "📦 [Atend-Car] Backup Semanal Automático - Concluído com Sucesso"
-    corpo = f"""Olá, Administrador!
-O backup semanal do sistema Atend-Car foi realizado com sucesso.
-Em anexo, você encontrará o arquivo contendo todo o histórico de boletos, fornecedores e configurações de metas updated até a data de hoje. Este arquivo serve para a segurança dos seus dados.
-- Data do Backup: {agora_texto}
-- Status do Servidor: Operando normalmente (Plano Gratuito)
-Atenciosamente,
-Robô de Backups Atend-Car"""
-
-    try:
-        msg = MIMEMultipart()
-        msg["From"] = EMAIL_FROM
-        msg["To"] = EMAIL_TO_BACKUP
-        msg["Subject"] = assunto
-        msg["Date"] = formatdate(localtime=True)
-        msg.attach(MIMEText(corpo, "plain", "utf-8"))
-
-        part = MIMEBase("application", "octet-stream")
-        part.set_payload(dados_zip)
-        encoders.encode_base64(part)
-        part.add_header(
-            "Content-Disposition",
-            f"attachment; filename={nome_arquivo}",
-        )
-        msg.attach(part)
-
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(EMAIL_FROM, EMAIL_TO_BACKUP, msg.as_string())
-        server.quit()
-        email_ok = True
-    except Exception as e:
-        print(f"[ERRO SMTP] Falha ao enviar e-mail de backup: {e}")
-        email_ok = False
-
-    registrar_auditoria("backup_agendado", "sistema", 0, admin_id, "Backup agendado executado com sucesso")
-    return email_ok
-
-@app.get("/admin/backup-agendado")
-def backup_agendado(admin: dict = Depends(get_current_admin_user)):
-    if not BACKUP_SCHEDULED:
-        return {"mensagem": "Backup desativado pelo administrador do sistema."}
-    try:
-        conexao = get_connection()
-        cursor = conexao.cursor()
-        cursor.execute("SELECT valor FROM config WHERE chave = 'backup_auto'")
-        row = cursor.fetchone()
-        cursor.close()
-        conexao.close()
-        ativo = row and row[0] == 'true'
-        if not ativo:
-            return {"mensagem": "Backup automático desativado nas configurações."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao verificar configuração de backup: {e}")
-
-    if not all([SMTP_SERVER, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO_BACKUP]):
-        raise HTTPException(status_code=500, detail="Configurações de SMTP incompletas.")
-
-    try:
-        email_ok = executar_backup_agendado(admin_id=admin["id"])
-        if email_ok:
-            return {"mensagem": "Backup agendado executado e enviado por e-mail com sucesso!"}
-        return {"mensagem": "Backup gerado, mas o envio por e-mail falhou. Verifique as configurações SMTP.", "email_enviado": False}
-    except Exception as e:
-        print(f"[ERRO] Falha no backup agendado: {e}")
-        raise HTTPException(status_code=500, detail=f"Falha no backup agendado: {e}")
 
 @app.post("/admin/recuperar-boleto/{boleto_id}")
 def recuperar_boleto(boleto_id: int, admin: dict = Depends(get_current_admin_user)):

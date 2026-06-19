@@ -1,10 +1,8 @@
 import os
 import sys
 import psycopg2
-import smtplib
 import threading
 import pytest
-from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dotenv import load_dotenv
@@ -65,12 +63,6 @@ def db_transaction():
     _CONN.conn = None
     db_mod.get_connection = _conectar
     main_mod.get_connection = _conectar
-
-
-@pytest.fixture(autouse=True)
-def mock_smtp():
-    with patch.object(smtplib, 'SMTP') as mock:
-        yield mock
 
 
 # === HELPERS ===
