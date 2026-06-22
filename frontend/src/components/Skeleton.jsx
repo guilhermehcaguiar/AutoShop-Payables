@@ -1,9 +1,11 @@
+const LARGURAS_SKELETON = [60, 75, 50, 85, 65, 70, 55, 90];
+
 function SkeletonLinha({ colunas = 8 }) {
   return (
     <tr className="animate-pulse">
       {Array.from({ length: colunas }).map((_, i) => (
         <td key={i} className="px-5 py-4">
-          <div className="h-4 bg-slate-700/50 rounded" style={{ width: `${60 + Math.random() * 30}%` }} />
+          <div className="h-4 bg-slate-700/50 rounded" style={{ width: `${LARGURAS_SKELETON[i % LARGURAS_SKELETON.length]}%` }} />
         </td>
       ))}
     </tr>

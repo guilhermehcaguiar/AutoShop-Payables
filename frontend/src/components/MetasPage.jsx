@@ -23,14 +23,15 @@ function MetasPage({ mostrarToast }) {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resp.ok) setMetas(await resp.json());
-    } catch {} finally { setCarregando(false); }
+    } catch { /* noop */ } finally { setCarregando(false); }
   };
 
   useEffect(() => {
-    fetchMetas();
+    const timer = setTimeout(fetchMetas, 0);
     const token = localStorage.getItem('token');
     apiFetch('/categorias/', { headers: { 'Authorization': `Bearer ${token}` } })
-      .then((r) => r.ok && r.json()).then(setCategorias).catch(() => {});
+      .then((r) => r.ok && r.json()).then(setCategorias).catch(() => undefined);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleSubmit = async (e) => {

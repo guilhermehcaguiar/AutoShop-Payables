@@ -10,12 +10,15 @@ function ModalPagamento({ aberto, boleto, onFechar, onConfirmado }) {
 
   useEffect(() => {
     if (!aberto) return;
-    setMetodoPagamento('');
-    setBanco('');
-    setCopiado(false);
+    const timer = setTimeout(() => {
+      setMetodoPagamento('');
+      setBanco('');
+      setCopiado(false);
+    }, 0);
     const token = localStorage.getItem('token');
     apiFetch('/boletos/bancos-utilizados', { headers: { 'Authorization': `Bearer ${token}` } })
-      .then((r) => r.ok && r.json()).then(setBancos).catch(() => {});
+      .then((r) => r.ok && r.json()).then(setBancos).catch(() => undefined);
+    return () => clearTimeout(timer);
   }, [aberto]);
 
   const handleCopiar = async () => {
@@ -23,7 +26,7 @@ function ModalPagamento({ aberto, boleto, onFechar, onConfirmado }) {
       await navigator.clipboard.writeText(boleto.codigo_barras || '');
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
-    } catch {}
+    } catch { /* noop */ }
   };
 
   const handleConfirmar = async () => {
@@ -39,7 +42,7 @@ function ModalPagamento({ aberto, boleto, onFechar, onConfirmado }) {
         onConfirmado(boleto.id, metodoPagamento, banco);
         onFechar();
       }
-    } catch {}
+    } catch { /* noop */ }
     setSalvando(false);
   };
 
@@ -64,7 +67,7 @@ function ModalPagamento({ aberto, boleto, onFechar, onConfirmado }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Valor</label>
-            <p className="text-lg font-bold text-atend-verde">R$ {Number(boleto.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p className="text-lg font-bold text-atend-verde">R$ {Number(boleto.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Código de Barras</label>

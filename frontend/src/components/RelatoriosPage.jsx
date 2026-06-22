@@ -7,6 +7,29 @@ import html2canvas from 'html2canvas';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
+function AccordionSection({ indice, icone, titulo, descricao, children, aberto, onToggle }) {
+  return (
+    <div className="border-b border-atend-border last:border-b-0">
+      <button onClick={() => onToggle(indice)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-all duration-200 active:scale-[0.98] focus:outline-none">
+        <div className="flex items-center gap-3">
+          <span className="text-lg">{icone}</span>
+          <div className="text-left">
+            <h3 className="text-sm font-bold text-white">{titulo}</h3>
+            <p className="text-xs text-slate-400">{descricao}</p>
+          </div>
+        </div>
+        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${aberto ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
+      </button>
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${aberto ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className="px-5 pb-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RelatoriosPage({ mostrarToast }) {
   // === STATES ===
   const agora = new Date();
@@ -51,12 +74,12 @@ const [pdfPronto, setPdfPronto] = useState(null);
       if (respC.ok) setPorCategoria(await respC.json());
       if (respP.ok) setProjecao(await respP.json());
       if (respE.ok) setEvolucao(await respE.json());
-    } catch {} finally { setCarregando(false); }
+    } catch { /* noop */ } finally { setCarregando(false); }
   };
 
-  useEffect(() => { fetchRelatorio(); }, [ano, mes, diaInicio, diaFim, filtroStatusRel]);
+  useEffect(() => { const t = setTimeout(fetchRelatorio, 0); return () => clearTimeout(t); }, [ano, mes, diaInicio, diaFim, filtroStatusRel]);
 
-  const formatar = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const formatar = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const maxTotal = Math.max(...porFornecedor.map((f) => f.total), 1);
 
   const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase());
@@ -81,27 +104,6 @@ const [pdfPronto, setPdfPronto] = useState(null);
     ? Object.keys(dadosGrafico[0]).filter((k) => k !== 'name' && k !== 'total')
     : [];
 
-  const AccordionSection = ({ indice, icone, titulo, descricao, children }) => (
-    <div className="border-b border-atend-border last:border-b-0">
-      <button onClick={() => setSecaoAberta(secaoAberta === indice ? null : indice)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-all duration-200 active:scale-[0.98] focus:outline-none">
-        <div className="flex items-center gap-3">
-          <span className="text-lg">{icone}</span>
-          <div className="text-left">
-            <h3 className="text-sm font-bold text-white">{titulo}</h3>
-            <p className="text-xs text-slate-400">{descricao}</p>
-          </div>
-        </div>
-        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${secaoAberta === indice ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
-      </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${secaoAberta === indice ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-        <div className="px-5 pb-4">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-
   // === EXPORT PDF ===
   const exportarPDF = async () => {
     setExportando(true);
@@ -115,27 +117,15 @@ const [pdfPronto, setPdfPronto] = useState(null);
       const pdfParams = new URLSearchParams({ ano, mes });
       if (diaInicio) pdfParams.set('dia_inicio', diaInicio);
       if (diaFim) pdfParams.set('dia_fim', diaFim);
-      const [respM, respC, respE, respF] = await Promise.all([
+      const [respM, respC] = await Promise.all([
         apiFetch(`/relatorio/mensal?${pdfParams}`),
         apiFetch(`/relatorio/categorias?${pdfParams}`),
-        apiFetch(`/boletos/evolucao-mensal`),
-        apiFetch(`/relatorio/fornecedores?${pdfParams}`),
       ]);
       if (!respM.ok) { mostrarToast?.('Erro ao carregar dados', 'erro'); setExportando(false); return; }
 
       const m = await respM.json();
       const cats = respC.ok ? await respC.json() : [];
-      const evol = respE.ok ? await respE.json() : [];
-      const fornecs = respF.ok ? await respF.json() : [];
-
-      const evolArray = Array.isArray(evol) ? evol : [];
-      const mesKey = `${ano}-${String(mes).padStart(2, '0')}`;
-      const idxAtual = evolArray.findIndex((e) => e.mes === mesKey);
-      const mesAnterior = idxAtual > 0 ? evolArray[idxAtual - 1] : null;
       const totalGeral = (m.total_pago || 0) + (m.total_pendente || 0);
-      const totalAnterior = mesAnterior ? (mesAnterior.pago || 0) + (mesAnterior.pendente || 0) : 0;
-      const diffTotal = totalGeral - totalAnterior;
-      const diffPct = totalAnterior > 0 ? ((diffTotal / totalAnterior) * 100) : 0;
 
       const totalDias = diaInicio && diaFim ? (parseInt(diaFim) - parseInt(diaInicio) + 1) : new Date(ano, mes, 0).getDate();
       const mediaDiaria = totalDias > 0 ? totalGeral / totalDias : 0;
@@ -153,8 +143,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
       const pw = doc.internal.pageSize.getWidth();
       const ph = doc.internal.pageSize.getHeight();
       const ml = 12, mr = 12, cw = pw - ml - mr;
-      const fmt = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-      const BG = '#0f1117', CARD = '#1a1d27', BORDER = '#2a2d3a', GREEN = '#2ecc71';
+      const fmt = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       let y = 0;
 
       try {
@@ -406,7 +395,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
             y += 11;
             doc.addImage(chartImgData, 'PNG', ml, y, chartImgW, chartImgH);
             y += chartImgH + 8;
-          } catch {}
+          } catch { /* noop */ }
         }
 
         // === FOOTER ===
@@ -511,7 +500,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
           </div>
 
           <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-            <AccordionSection indice={1} icone="📊" titulo="Projeção de Fluxo (Previsto)" descricao="Gráfico de barras com fluxo de caixa projetado">
+            <AccordionSection indice={1} icone="📊" titulo="Projeção de Fluxo (Previsto)" descricao="Gráfico de barras com fluxo de caixa projetado" aberto={secaoAberta === 1} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               {dadosGrafico.length > 0 ? (
                 <div className="w-full overflow-x-auto" id="chart-pdf-projecao">
                   <ResponsiveContainer width={Math.max(dadosGrafico.length * 120, 400)} height={320}>
@@ -535,7 +524,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
               )}
             </AccordionSection>
 
-            <AccordionSection indice={2} icone="📈" titulo="Evolução Mensal (12 meses)" descricao="Comparativo de pagos vs pendentes ao longo do ano">
+            <AccordionSection indice={2} icone="📈" titulo="Evolução Mensal (12 meses)" descricao="Comparativo de pagos vs pendentes ao longo do ano" aberto={secaoAberta === 2} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               {evolucao.length > 0 ? (
                 <div className="w-full overflow-x-auto">
                   <ResponsiveContainer width="100%" height={320}>
@@ -559,7 +548,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
               )}
             </AccordionSection>
 
-            <AccordionSection indice={3} icone="📊" titulo="Por Fornecedor / Categoria" descricao="Distribuição de gastos por fornecedor e categoria">
+            <AccordionSection indice={3} icone="📊" titulo="Por Fornecedor / Categoria" descricao="Distribuição de gastos por fornecedor e categoria" aberto={secaoAberta === 3} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div>
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">📊 Por Fornecedor</h4>
@@ -610,7 +599,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
               </div>
             </AccordionSection>
 
-            <AccordionSection indice={4} icone="📋" titulo="Demonstrativo do Resultado (DRE)" descricao="Resumo financeiro do período">
+            <AccordionSection indice={4} icone="📋" titulo="Demonstrativo do Resultado (DRE)" descricao="Resumo financeiro do período" aberto={secaoAberta === 4} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               <div className="flex items-center justify-between mb-4">
                 <p className="text-xs text-slate-400">Receitas e despesas do período</p>
                 <button onClick={exportarPDF} disabled={exportando}

@@ -19,10 +19,10 @@ function FornecedoresPage({ mostrarToast }) {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (resp.ok) setFornecedores(await resp.json());
-    } catch {} finally { setCarregando(false); }
+    } catch { /* noop */ } finally { setCarregando(false); }
   };
 
-  useEffect(() => { fetchFornecedores(); }, []);
+  useEffect(() => { const t = setTimeout(fetchFornecedores, 0); return () => clearTimeout(t); }, []);
 
   const abrirModal = (fornecedor = null) => {
     if (fornecedor) {

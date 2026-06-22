@@ -14,7 +14,7 @@ function AuditoriaPage() {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (resp.ok) setRegistros(await resp.json());
-      } catch {} finally { setCarregando(false); }
+      } catch { /* noop */ } finally { setCarregando(false); }
     };
     fetchAuditoria();
   }, []);

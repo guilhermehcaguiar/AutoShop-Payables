@@ -2,14 +2,10 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../api.js';
 import ConfirmDialog from './ConfirmDialog';
 
-function AdminPage({ mostrarToast }) {
-  const [moduloAberto, setModuloAberto] = useState(null);
-  const token = localStorage.getItem('token');
-  const headers = { 'Authorization': `Bearer ${token}` };
-
-  const AccordionSection = ({ indice, icone, titulo, descricao, children }) => (
+function AccordionSection({ indice, icone, titulo, descricao, children, aberto, onToggle }) {
+  return (
     <div className="border-b border-atend-border last:border-b-0">
-      <button onClick={() => setModuloAberto(moduloAberto === indice ? null : indice)}
+      <button onClick={() => onToggle(indice)}
         className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-all duration-200 active:scale-[0.98] focus:outline-none">
         <div className="flex items-center gap-3">
           <span className="text-lg">{icone}</span>
@@ -18,15 +14,21 @@ function AdminPage({ mostrarToast }) {
             <p className="text-xs text-slate-400">{descricao}</p>
           </div>
         </div>
-        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${moduloAberto === indice ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
+        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${aberto ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
       </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${moduloAberto === indice ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${aberto ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
         <div className="px-5 pb-4">
           {children}
         </div>
       </div>
     </div>
   );
+}
+
+function AdminPage({ mostrarToast }) {
+  const [moduloAberto, setModuloAberto] = useState(null);
+  const token = localStorage.getItem('token');
+  const headers = { 'Authorization': `Bearer ${token}` };
 
   const getCatName = (c) => typeof c === 'string' ? c : (c.categoria || c.nome || '');
 
@@ -44,10 +46,10 @@ function AdminPage({ mostrarToast }) {
     try {
       const resp = await apiFetch('/admin/usuarios/', { headers });
       if (resp.ok) setUsuarios(await resp.json());
-    } catch {}
+    } catch { /* noop */ }
   };
 
-  useEffect(() => { fetchUsuarios(); }, []);
+  useEffect(() => { const t = setTimeout(fetchUsuarios, 0); return () => clearTimeout(t); }, []);
 
   const toggleAdmin = async (usuario) => {
     try {
@@ -118,10 +120,10 @@ function AdminPage({ mostrarToast }) {
         const data = await resp.json();
         setCategorias(Array.isArray(data) ? data : []);
       }
-    } catch {}
+    } catch { /* noop */ }
   };
 
-  useEffect(() => { if (moduloAberto === 2) fetchCategorias(); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 2) fetchCategorias(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
 
   const mesclarCategoria = async (nomeAntigo) => {
     if (!novoNomeCategoria.trim()) {
@@ -168,10 +170,10 @@ function AdminPage({ mostrarToast }) {
         if (meta) limits[catName] = meta.limite_mensal;
       });
       setLimites(limits);
-    } catch {}
+    } catch { /* noop */ }
   };
 
-  useEffect(() => { if (moduloAberto === 3) fetchDadosTeto(); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 3) fetchDadosTeto(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
 
   const salvarLimite = async (categoria) => {
     try {
@@ -278,11 +280,11 @@ function AdminPage({ mostrarToast }) {
         gasto: gastoMap[m.categoria] || 0,
       })).filter((m) => m.limite > 0);
       setMetaGasto(combined);
-    } catch {}
+    } catch { /* noop */ }
     setCarregandoMeta(false);
   };
 
-  useEffect(() => { if (moduloAberto === 5) fetchMetaGasto(); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 5) fetchMetaGasto(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
 
   // === MÓDULO 6: BOLETOS EXCLUÍDOS ===
   const [excluidos, setExcluidos] = useState([]);
@@ -293,11 +295,11 @@ function AdminPage({ mostrarToast }) {
     try {
       const resp = await apiFetch('/boletos/excluidos', { headers });
       if (resp.ok) setExcluidos(await resp.json());
-    } catch {}
+    } catch { /* noop */ }
     setCarregandoExcluidos(false);
   };
 
-  useEffect(() => { if (moduloAberto === 6) fetchExcluidos(); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 6) fetchExcluidos(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
 
   const recuperarBoleto = async (id) => {
     try {
@@ -321,11 +323,11 @@ function AdminPage({ mostrarToast }) {
     try {
       const resp = await apiFetch('/boletos/recorrentes', { headers });
       if (resp.ok) setRecorrentes(await resp.json());
-    } catch {}
+    } catch { /* noop */ }
     setCarregandoRecorrentes(false);
   };
 
-  useEffect(() => { if (moduloAberto === 7) fetchRecorrentes(); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 7) fetchRecorrentes(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
 
   const deletarRecorrente = async (id) => {
     try {
@@ -348,7 +350,7 @@ function AdminPage({ mostrarToast }) {
       </div>
 
       {/* === MÓDULO 1 === */}
-      <AccordionSection indice={1} icone="📁" titulo="Gerenciar Usuários" descricao="Cadastro e permissões de usuários">
+      <AccordionSection indice={1} icone="📁" titulo="Gerenciar Usuários" descricao="Cadastro e permissões de usuários" aberto={moduloAberto === 1} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mb-3 mt-1 flex justify-end">
           <button onClick={() => setCriando(true)}
             className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10">
@@ -484,7 +486,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 2 === */}
-      <AccordionSection indice={2} icone="📊" titulo="Moderação de Categorias" descricao="Editar ou mesclar categorias de boletos">
+      <AccordionSection indice={2} icone="📊" titulo="Moderação de Categorias" descricao="Editar ou mesclar categorias de boletos" aberto={moduloAberto === 2} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {categorias.length === 0 && (
             <p className="text-sm text-slate-500 italic py-2">Nenhuma categoria encontrada.</p>
@@ -519,7 +521,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 3 === */}
-      <AccordionSection indice={3} icone="📈" titulo="Teto de Gastos" descricao="Definir limites mensais por categoria">
+      <AccordionSection indice={3} icone="📈" titulo="Teto de Gastos" descricao="Definir limites mensais por categoria" aberto={moduloAberto === 3} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {categoriasMeta.length === 0 && (
             <p className="text-sm text-slate-500 italic py-2">Nenhuma categoria disponível.</p>
@@ -547,7 +549,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 4 === */}
-      <AccordionSection indice={4} icone="⚙️" titulo="Central de Backup" descricao="Exportar, importar e gerenciar dados">
+      <AccordionSection indice={4} icone="⚙️" titulo="Central de Backup" descricao="Exportar, importar e gerenciar dados" aberto={moduloAberto === 4} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-4">
           {/* Baixar Cópia */}
           <div className="flex items-center justify-between bg-slate-900/20 rounded-lg px-4 py-3 border border-atend-border/50">
@@ -597,7 +599,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 5 === */}
-      <AccordionSection indice={5} icone="💰" titulo="Meta vs Gasto" descricao="Comparativo do mês atual por categoria">
+      <AccordionSection indice={5} icone="💰" titulo="Meta vs Gasto" descricao="Comparativo do mês atual por categoria" aberto={moduloAberto === 5} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {carregandoMeta ? (
             <p className="text-sm text-slate-500 italic py-2">Carregando...</p>
@@ -627,7 +629,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 6 === */}
-      <AccordionSection indice={6} icone="🗑" titulo="Boletos Excluídos" descricao="Recuperar boletos deletados">
+      <AccordionSection indice={6} icone="🗑" titulo="Boletos Excluídos" descricao="Recuperar boletos deletados" aberto={moduloAberto === 6} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {carregandoExcluidos ? (
             <p className="text-sm text-slate-500 italic py-2">Carregando...</p>
@@ -668,7 +670,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 7 === */}
-      <AccordionSection indice={7} icone="🔄" titulo="Modelos Recorrentes" descricao="Gerenciar boletos recorrentes">
+      <AccordionSection indice={7} icone="🔄" titulo="Modelos Recorrentes" descricao="Gerenciar boletos recorrentes" aberto={moduloAberto === 7} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {carregandoRecorrentes ? (
             <p className="text-sm text-slate-500 italic py-2">Carregando...</p>

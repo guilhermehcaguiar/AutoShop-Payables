@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../api.js';
+import ScannerBoleto from './ScannerBoleto.jsx';
 
 function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [fornecedor, setFornecedor] = useState('');
@@ -15,6 +16,7 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [mostrarDropdownFornecedor, setMostrarDropdownFornecedor] = useState(false);
   const [recorrente, setRecorrente] = useState(false);
   const [nMeses, setNMeses] = useState(3);
+  const [mostrarScanner, setMostrarScanner] = useState(false);
   const editando = !!boletoEditando;
 
   const fornecedoresFiltrados = fornecedores.filter((f) =>
@@ -23,27 +25,30 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
 
   useEffect(() => {
     if (!aberto) return;
-    if (boletoEditando) {
-      setFornecedor(boletoEditando.fornecedor);
-      setValor(boletoEditando.valor.toFixed(2).replace('.', ','));
-      setVencimento(boletoEditando.vencimento);
-      setCodigoBarras(boletoEditando.codigo_barras || '');
-      setCategoria(boletoEditando.categoria || '');
-      setDescricao(boletoEditando.descricao || '');
-    } else {
-      setFornecedor(''); setValor(''); setVencimento('');
-      setCodigoBarras(''); setCategoria('');
-      setDescricao('');
-    }
-    setRecorrente(false);
-    setNMeses(3);
-    setErro('');
     const token = localStorage.getItem('token');
     const headers = { 'Authorization': `Bearer ${token}` };
+    const timer = setTimeout(() => {
+      if (boletoEditando) {
+        setFornecedor(boletoEditando.fornecedor);
+        setValor(boletoEditando.valor.toFixed(2).replace('.', ','));
+        setVencimento(boletoEditando.vencimento);
+        setCodigoBarras(boletoEditando.codigo_barras || '');
+        setCategoria(boletoEditando.categoria || '');
+        setDescricao(boletoEditando.descricao || '');
+      } else {
+        setFornecedor(''); setValor(''); setVencimento('');
+        setCodigoBarras(''); setCategoria('');
+        setDescricao('');
+      }
+      setRecorrente(false);
+      setNMeses(3);
+      setErro('');
+    }, 0);
     apiFetch('/boletos/categorias-utilizadas', { headers })
       .then((r) => r.ok && r.json()).then(setCategorias).catch(() => {});
     apiFetch('/fornecedores/', { headers })
       .then((r) => r.ok && r.json()).then(setFornecedores).catch(() => {});
+    return () => clearTimeout(timer);
   }, [aberto, boletoEditando]);
 
   const adicionarMeses = (data, meses) => {
@@ -184,10 +189,17 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Código de Barras</label>
-            <input type="text" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value.replace(/\D/g, ''))}
-              placeholder="Código do boleto"
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
-              required />
+            <div className="flex gap-2">
+              <input type="text" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value.replace(/\D/g, ''))}
+                placeholder="Código do boleto"
+                className="flex-1 bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
+                required />
+              <button type="button" onClick={() => setMostrarScanner(true)}
+                className="shrink-0 bg-atend-verde/15 hover:bg-atend-verde/25 border border-atend-verde/30 rounded-lg px-3 py-2.5 text-lg leading-none transition-all duration-200 active:scale-95"
+                title="Escanear código de barras">
+                📷
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
@@ -257,6 +269,12 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
           </div>
         </form>
       </div>
+
+      <ScannerBoleto
+        aberto={mostrarScanner}
+        onScan={(codigo) => { setCodigoBarras(codigo); setMostrarScanner(false); }}
+        onFechar={() => setMostrarScanner(false)}
+      />
     </div>
   );
 }
