@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../api.js';
+import { parseValorBR, formatarValorBR } from '../formatar.js';
 import ScannerBoleto from './ScannerBoleto.jsx';
 
 function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
@@ -89,9 +90,15 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
     setCarregando(true);
     const token = localStorage.getItem('token');
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const valorNumerico = parseValorBR(valor);
+    if (valorNumerico === null) {
+      setErro('Valor inválido. Digite apenas números (ex: 1.500,00)');
+      setCarregando(false);
+      return;
+    }
     const bodyBase = {
       fornecedor,
-      valor: parseFloat(valor.replace(',', '.')),
+      valor: valorNumerico,
       codigo_barras: codigoBarras || null,
       categoria: categoria || null,
       descricao: descricao || null,
@@ -112,20 +119,30 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       }
       const boletosCriar = recorrente ? boletosPreview : [{ vencimento, ...bodyBase }];
       let sucesso = 0;
+      let erroDetalhe = '';
       for (const b of boletosCriar) {
         const resp = await apiFetch('/boletos/', {
           method: 'POST',
           headers,
           body: JSON.stringify({ ...b, vencimento: b.vencimento }),
         });
-        if (resp.ok) sucesso++;
+        if (resp.ok) {
+          sucesso++;
+          continue;
+        }
+        if (!erroDetalhe) {
+          try {
+            const dados = await resp.json();
+            erroDetalhe = dados.detail || '';
+          } catch { /* noop */ }
+        }
       }
       await autoSalvarFornecedor(token);
       if (sucesso > 0) {
         onBoletoCriado();
         onFechar();
       } else {
-        setErro('Erro ao criar boletos');
+        setErro(erroDetalhe || 'Erro ao criar boletos');
       }
     } catch {
       setErro('Erro de conexão com o servidor');
@@ -244,7 +261,7 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
                           <td className="px-3 py-2">{b.mes}</td>
                           <td className="px-3 py-2">{new Date(b.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                           <td className="px-3 py-2 text-right font-mono">
-                            R$ {parseFloat(b.valor.replace(',', '.')).toFixed(2).replace('.', ',')}
+                            R$ {formatarValorBR(parseValorBR(b.valor))}
                           </td>
                         </tr>
                       ))}

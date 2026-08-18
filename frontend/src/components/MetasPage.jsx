@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../api.js';
+import { parseValorBR } from '../formatar.js';
 import { SkeletonTabela } from './Skeleton';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -43,6 +44,12 @@ function MetasPage({ mostrarToast }) {
     }
     setSalvando(true);
     const token = localStorage.getItem('token');
+    const limiteNumerico = parseValorBR(limiteMensal);
+    if (limiteNumerico === null) {
+      setErro('Valor inválido. Digite apenas números (ex: 1.500,00)');
+      setSalvando(false);
+      return;
+    }
     try {
       const url = editando && editandoMeta ? `/metas/${editandoMeta.id}` : '/metas/';
       const method = editando && editandoMeta ? 'PUT' : 'POST';
@@ -51,7 +58,7 @@ function MetasPage({ mostrarToast }) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           categoria: categoria.trim(),
-          limite_mensal: parseFloat(limiteMensal.replace(',', '.')),
+          limite_mensal: limiteNumerico,
         }),
       });
       if (resp.ok) {
