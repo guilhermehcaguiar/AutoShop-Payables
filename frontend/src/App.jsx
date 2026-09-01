@@ -29,6 +29,8 @@ function App() {
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroDia, setFiltroDia] = useState('');
   const [filtroFornecedor, setFiltroFornecedor] = useState('');
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
   const [selecionados, setSelecionados] = useState(new Set());
   const [mesSelecionado, setMesSelecionado] = useState(() => {
     const agora = new Date();
@@ -266,7 +268,9 @@ function App() {
   }, [boletos, mesSelecionado]);
 
   const boletosFiltrados = useMemo(() => {
-    let lista = boletos.filter((b) => b.vencimento.startsWith(mesSelecionado));
+    let lista = dataInicio && dataFim
+      ? boletos.filter((b) => b.vencimento >= dataInicio && b.vencimento <= dataFim)
+      : boletos.filter((b) => b.vencimento.startsWith(mesSelecionado));
     if (filtroStatus === 'pendentes') lista = lista.filter((b) => b.status !== 'Pago');
     else if (filtroStatus === 'pagos') lista = lista.filter((b) => b.status === 'Pago');
     else if (filtroStatus === 'vencendo') lista = lista.filter((b) => b.vencimento === hoje && b.status !== 'Pago');
@@ -277,24 +281,32 @@ function App() {
       lista = lista.filter((b) => b.fornecedor === filtroFornecedor);
     }
     return lista.sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
-  }, [boletos, mesSelecionado, filtroStatus, filtroDia, filtroFornecedor, hoje]);
+  }, [boletos, mesSelecionado, dataInicio, dataFim, filtroStatus, filtroDia, filtroFornecedor, hoje]);
 
   const totalPago = useMemo(
     () => boletos.filter((b) => {
-      if (!b.vencimento.startsWith(mesSelecionado)) return false;
+      if (dataInicio && dataFim) {
+        if (b.vencimento < dataInicio || b.vencimento > dataFim) return false;
+      } else if (!b.vencimento.startsWith(mesSelecionado)) {
+        return false;
+      }
       if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
       return b.status === 'Pago';
     }).reduce((s, b) => s + b.valor, 0),
-    [boletos, mesSelecionado, filtroDia]
+    [boletos, mesSelecionado, dataInicio, dataFim, filtroDia]
   );
 
   const totalAPagar = useMemo(
     () => boletos.filter((b) => {
-      if (!b.vencimento.startsWith(mesSelecionado)) return false;
+      if (dataInicio && dataFim) {
+        if (b.vencimento < dataInicio || b.vencimento > dataFim) return false;
+      } else if (!b.vencimento.startsWith(mesSelecionado)) {
+        return false;
+      }
       if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
       return b.status !== 'Pago';
     }).reduce((s, b) => s + b.valor, 0),
-    [boletos, mesSelecionado, filtroDia]
+    [boletos, mesSelecionado, dataInicio, dataFim, filtroDia]
   );
 
   const vencendoHoje = useMemo(
@@ -319,8 +331,8 @@ function App() {
   const meses = useMemo(() => {
     const lista = [];
     const agora = new Date();
-    for (let i = 0; i < 12; i++) {
-      const data = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+    for (let i = -12; i <= 24; i++) {
+      const data = new Date(agora.getFullYear(), agora.getMonth() + i, 1);
       const valor = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
       const rotulo = data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^\w/, (c) => c.toUpperCase());
       lista.push({ valor, rotulo });
@@ -444,6 +456,23 @@ function App() {
               ))}
             </select>
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">📅</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-atend-bg border border-atend-border/50 rounded-lg px-2.5 py-1.5">
+            <span className="text-[11px] text-slate-500">Período</span>
+            <input type="date" value={dataInicio}
+              onChange={(e) => { setDataInicio(e.target.value); setSelecionados(new Set()); }}
+              className="bg-transparent text-xs text-slate-300 focus:outline-none [color-scheme:dark] cursor-pointer" />
+            <span className="text-xs text-slate-500">→</span>
+            <input type="date" value={dataFim}
+              onChange={(e) => { setDataFim(e.target.value); setSelecionados(new Set()); }}
+              className="bg-transparent text-xs text-slate-300 focus:outline-none [color-scheme:dark] cursor-pointer" />
+            {(dataInicio || dataFim) && (
+              <button type="button" onClick={() => { setDataInicio(''); setDataFim(''); setSelecionados(new Set()); }}
+                className="text-slate-500 hover:text-white text-sm leading-none px-0.5 transition-colors" title="Limpar período">
+                ×
+              </button>
+            )}
           </div>
 
           {diasDisponiveis.length > 0 && (

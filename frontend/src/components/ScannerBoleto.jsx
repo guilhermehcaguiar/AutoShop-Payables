@@ -39,42 +39,69 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
           return;
         }
 
-        const scanner = new Html5Qrcode(READER_ID);
-        scannerRef.current = scanner;
+        const formatos = [
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+        ];
 
-        await scanner.start(
-          { facingMode: 'environment' },
-          {
-            fps: 10,
-            qrbox: { width: 280, height: 100 },
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.ITF,
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.CODE_128,
-              Html5QrcodeSupportedFormats.CODE_39,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E,
-            ],
-          },
-          (decodedText) => {
-            const digits = decodedText.replace(/\D/g, '');
-            if (digits.length >= 44) {
-              scanner.stop().catch(() => undefined);
-              if (mounted) {
-                try { navigator.vibrate?.(200); } catch { /* noop */ }
-                onScanRef.current(digits);
-              }
+        const config = {
+          fps: 10,
+          qrbox: { width: 320, height: 100 },
+          useBarCodeDetectorIfSupported: false,
+          formatsToSupport: formatos,
+        };
+
+        const onSuccess = (decodedText) => {
+          const digits = decodedText.replace(/\D/g, '');
+          if (digits.length >= 44) {
+            scannerRef.current?.stop().catch(() => undefined);
+            scannerRef.current = null;
+            if (mounted) {
+              try { navigator.vibrate?.(200); } catch { /* noop */ }
+              onScanRef.current(digits);
             }
-          },
-          () => undefined
-        );
+          }
+        };
+
+        const traseira = cameras.find((c) => /back|rear|environment|traseir/i.test(c.label || ''))
+          || cameras[cameras.length - 1]
+          || cameras[0];
+
+        const alvos = [];
+        if (traseira?.id) alvos.push(traseira.id);
+        alvos.push({ facingMode: 'environment' });
+
+        let iniciou = false;
+        let ultimoErro = null;
+
+        for (const alvo of alvos) {
+          if (!mounted) return;
+          const scanner = new Html5Qrcode(READER_ID);
+          try {
+            await scanner.start(alvo, config, onSuccess, () => undefined);
+            scannerRef.current = scanner;
+            iniciou = true;
+            break;
+          } catch (err) {
+            ultimoErro = err;
+            try { scanner.clear(); } catch { /* noop */ }
+          }
+        }
+
+        if (!iniciou) {
+          throw ultimoErro || new Error('Falha ao inicializar a câmera');
+        }
 
         if (!mounted) return;
         setStatus('escaneando');
 
         try {
-          const caps = scanner.getRunningTrackCapabilities();
+          const caps = scannerRef.current?.getRunningTrackCapabilities();
           if (caps && 'torch' in caps) {
             setFlashDisponivel(true);
           }
