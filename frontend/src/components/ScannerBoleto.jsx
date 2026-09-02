@@ -29,107 +29,114 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
       setStatus('iniciando');
       setErro('');
 
-      try {
-        const cameras = await Html5Qrcode.getCameras();
-        if (!mounted) return;
-
-        if (!cameras || cameras.length === 0) {
-          setStatus('erro');
-          setErro('Nenhuma câmera encontrada no dispositivo.');
-          return;
-        }
-
-        const formatos = [
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-        ];
-
-        const config = {
-          fps: 10,
-          qrbox: { width: 320, height: 100 },
-          useBarCodeDetectorIfSupported: false,
-          formatsToSupport: formatos,
-        };
-
-        const onSuccess = (decodedText) => {
-          const digits = decodedText.replace(/\D/g, '');
-          if (digits.length >= 44) {
-            scannerRef.current?.stop().catch(() => undefined);
-            scannerRef.current = null;
-            if (mounted) {
-              try { navigator.vibrate?.(200); } catch { /* noop */ }
-              onScanRef.current(digits);
-            }
-          }
-        };
-
-        const traseira = cameras.find((c) => /back|rear|environment|traseir/i.test(c.label || ''))
-          || cameras[cameras.length - 1]
-          || cameras[0];
-
-        const alvos = [];
-        if (traseira?.id) alvos.push(traseira.id);
-        alvos.push({ facingMode: 'environment' });
-
-        let iniciou = false;
-        let ultimoErro = null;
-
-        for (const alvo of alvos) {
-          if (!mounted) return;
-          const scanner = new Html5Qrcode(READER_ID);
-          try {
-            await scanner.start(alvo, config, onSuccess, () => undefined);
-            scannerRef.current = scanner;
-            iniciou = true;
-            break;
-          } catch (err) {
-            ultimoErro = err;
-            try { scanner.clear(); } catch { /* noop */ }
-          }
-        }
-
-        if (!iniciou) {
-          throw ultimoErro || new Error('Falha ao inicializar a câmera');
-        }
-
-        if (!mounted) return;
-        setStatus('escaneando');
+      const tentarIniciar = async (tentativa = 1) => {
+        if (!mounted) return false;
 
         try {
-          const caps = scannerRef.current?.getRunningTrackCapabilities();
-          if (caps && 'torch' in caps) {
-            setFlashDisponivel(true);
+          const cameras = await Html5Qrcode.getCameras();
+
+          if (!cameras || cameras.length === 0) {
+            if (tentativa < 3) {
+              await new Promise(r => setTimeout(r, 500 * tentativa));
+              return tentarIniciar(tentativa + 1);
+            }
+            throw new Error('Nenhuma câmera encontrada. Verifique as permissões do navegador.');
           }
-        } catch { /* noop */ }
-      } catch (err) {
-        if (!mounted) return;
-        setStatus('erro');
-        const name = err?.name;
-        const msg = err?.message || '';
-        if (name === 'NotAllowedError' || msg.includes('Permission')) {
-          setErro('Acesso à câmera bloqueado. Permita o acesso nas configurações do navegador e tente novamente.');
-        } else if (name === 'NotFoundError' || msg.includes('NotFound')) {
-          setErro('Nenhuma câmera encontrada no dispositivo.');
-        } else if (name === 'NotReadableError' || msg.includes('NotReadable') || msg.includes('in use')) {
-          setErro('A câmera está sendo usada por outro aplicativo. Feche-o e tente novamente.');
-        } else if (name === 'OverconstrainedError') {
-          setErro('Câmera não suporta a resolução necessária.');
-        } else {
-          setErro(msg || 'Erro ao iniciar câmera.');
+
+          const formatos = [
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+          ];
+
+          const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+          const config = {
+            fps: 10,
+            qrbox: isMobile ? { width: 280, height: 100 } : { width: 360, height: 140 },
+            useBarCodeDetectorIfSupported: false,
+            formatsToSupport: formatos,
+          };
+
+          const onSuccess = (decodedText) => {
+            const digits = decodedText.replace(/\D/g, '');
+            if (digits.length >= 44) {
+              scannerRef.current?.stop().catch(() => undefined);
+              scannerRef.current = null;
+              if (mounted) {
+                try { navigator.vibrate?.(200); } catch { /* noop */ }
+                onScanRef.current(digits);
+              }
+            }
+          };
+
+          const traseira = cameras.find((c) => /back|rear|environment|traseir/i.test(c.label || ''))
+            || cameras[cameras.length - 1]
+            || cameras[0];
+
+          const alvos = [];
+          if (traseira?.id) alvos.push(traseira.id);
+          cameras.forEach((c) => { if (c.id && !alvos.includes(c.id)) alvos.push(c.id); });
+          alvos.push({ facingMode: 'environment' });
+
+          let ultimoErro = null;
+
+          for (const alvo of alvos) {
+            if (!mounted) return false;
+            const scanner = new Html5Qrcode(READER_ID);
+            try {
+              await scanner.start(alvo, config, onSuccess, () => undefined);
+              scannerRef.current = scanner;
+
+              try {
+                const caps = scanner.getRunningTrackCapabilities();
+                if (caps && 'torch' in caps) {
+                  await scanner.applyVideoConstraints({ torch: true });
+                  flashStateRef.current = true;
+                  setFlashOn(true);
+                  setFlashDisponivel(true);
+                }
+              } catch { /* noop */ }
+
+              if (mounted) setStatus('escaneando');
+              return true;
+            } catch (err) {
+              ultimoErro = err;
+              try { scanner.clear(); } catch { /* noop */ }
+            }
+          }
+
+          throw ultimoErro || new Error('Falha ao inicializar a câmera');
+        } catch (err) {
+          if (!mounted) return false;
+          setStatus('erro');
+          const name = err?.name;
+          const msg = err?.message || '';
+          if (name === 'NotAllowedError' || msg.includes('Permission')) {
+            setErro('Acesso à câmera bloqueado. Permita o acesso nas configurações do navegador e recarregue a página.');
+          } else if (name === 'NotFoundError' || msg.includes('NotFound')) {
+            setErro('Nenhuma câmera encontrada no dispositivo.');
+          } else if (name === 'NotReadableError' || msg.includes('NotReadable') || msg.includes('in use')) {
+            setErro('A câmera está sendo usada por outro aplicativo. Feche-o e tente novamente.');
+          } else if (name === 'OverconstrainedError') {
+            setErro('Câmera não suporta a resolução necessária.');
+          } else {
+            setErro(msg || 'Erro ao iniciar câmera.');
+          }
+          return false;
         }
-      }
+      };
+
+      await tentarIniciar();
     };
 
-    const timer = setTimeout(iniciar, 200);
+    (async () => { await iniciar(); })();
 
     return () => {
       mounted = false;
-      clearTimeout(timer);
       setFlashOn(false);
       setFlashDisponivel(false);
       flashStateRef.current = false;
