@@ -1,303 +1,233 @@
-import { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
+import { normalizarBoleto } from '../boleto.js';
 
 const READER_ID = 'boleto-scanner-reader';
+let proximaSessao = 0;
+const CONFIG = { formatsToSupport: [Html5QrcodeSupportedFormats.ITF], useBarCodeDetectorIfSupported: false, verbose: false };
+
+async function aguardarVideo(scanner) {
+  // start() resolve antes de play() e da criação do canvas em html5-qrcode 2.3.8.
+  // A fila só pode liberar a câmera depois de o evento playing inicializar o leitor.
+  for (let i = 0; i < 100; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    if (scanner.isScanning) return;
+  }
+  throw new Error('A câmera abriu, mas o vídeo não iniciou. Tente novamente ou use uma imagem.');
+}
+
+async function liberar(session) {
+  if (!session.scanner) return;
+  const video = session.reader.querySelector('video');
+  const tracks = video?.srcObject?.getTracks() || [];
+  const state = session.scanner.getState();
+  try {
+    if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+      await session.scanner.stop();
+    }
+  } catch { /* start incompleto pode ainda não ter criado o canvas. */ }
+  finally { tracks.forEach((track) => track.stop()); }
+  try { session.scanner.clear(); }
+  catch { session.reader.replaceChildren(); }
+  session.scanner = null;
+}
+
+function mensagemCamera(err) {
+  const texto = String(err?.message || err || 'Erro ao iniciar câmera.');
+  const causa = String(err?.name) + ' ' + texto;
+  if (/NotAllowed|Permission|denied/i.test(causa)) return 'Acesso à câmera bloqueado. Permita a câmera nas configurações do navegador.';
+  if (/NotFound/i.test(causa)) return 'Nenhuma câmera encontrada. Use uma imagem ou cole a linha digitável no cadastro.';
+  if (/NotReadable|in use/i.test(causa)) return 'Câmera ocupada. Feche outros aplicativos e tente novamente.';
+  return texto;
+}
 
 function ScannerBoleto({ aberto, onScan, onFechar }) {
   const [status, setStatus] = useState('iniciando');
   const [erro, setErro] = useState('');
   const [flashOn, setFlashOn] = useState(false);
   const [flashDisponivel, setFlashDisponivel] = useState(false);
-  const scannerRef = useRef(null);
+  const [tentativa, setTentativa] = useState(0);
+  const sessionRef = useRef(null);
+  const filaRef = useRef(Promise.resolve());
+  const containerRef = useRef(null);
   const onScanRef = useRef(onScan);
-  const flashStateRef = useRef(false);
-
   useEffect(() => { onScanRef.current = onScan; }, [onScan]);
 
-  useEffect(() => {
-    if (!aberto) {
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => undefined);
-        scannerRef.current = null;
-      }
-      return;
-    }
+  function enfileirar(tarefa) {
+    const operacao = filaRef.current.then(tarefa);
+    filaRef.current = operacao.catch(() => undefined);
+    return operacao;
+  }
 
-    let mounted = true;
+  useLayoutEffect(() => {
+    if (!aberto) return;
+    const container = containerRef.current;
+    const reader = document.createElement('div');
+    reader.id = READER_ID + '-' + ++proximaSessao;
+    reader.style.width = '1280px';
+    reader.style.transformOrigin = 'top left';
+    container.prepend(reader);
+    const session = { cancelada: false, modo: 'camera', scanner: null, entregue: false, reader };
+    sessionRef.current = session;
+    const ajustar = () => {
+      reader.style.transform = 'scale(' + container.clientWidth / 1280 + ')';
+    };
+    ajustar();
+    const observer = new ResizeObserver(ajustar);
+    observer.observe(container);
 
-    const iniciar = async () => {
-      setStatus('iniciando');
-      setErro('');
+    const aceitar = (texto) => {
+      if (session.cancelada || session.entregue || session.modo !== 'camera') return;
+      let codigo;
+      try { codigo = normalizarBoleto(texto); }
+      catch (err) { setErro(err.message); return; }
+      session.entregue = true;
+      setStatus('processando');
+      enfileirar(async () => {
+        await liberar(session);
+        if (!session.cancelada) onScanRef.current(codigo);
+      }).catch((err) => {
+        if (!session.cancelada) { setStatus('erro'); setErro(mensagemCamera(err)); }
+      });
+    };
 
-      const tentarIniciar = async (tentativa = 1) => {
-        if (!mounted) return false;
-
-        try {
-          const cameras = await Html5Qrcode.getCameras();
-
-          if (!cameras || cameras.length === 0) {
-            if (tentativa < 3) {
-              await new Promise(r => setTimeout(r, 500 * tentativa));
-              return tentarIniciar(tentativa + 1);
-            }
-            throw new Error('Nenhuma câmera encontrada. Verifique as permissões do navegador.');
-          }
-
-          const formatos = [
-            Html5QrcodeSupportedFormats.ITF,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-          ];
-
-          const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
-          const config = {
-            fps: 10,
-            qrbox: isMobile ? { width: 280, height: 100 } : { width: 360, height: 140 },
-            useBarCodeDetectorIfSupported: false,
-            formatsToSupport: formatos,
-          };
-
-          const onSuccess = (decodedText) => {
-            const digits = decodedText.replace(/\D/g, '');
-            if (digits.length >= 44) {
-              scannerRef.current?.stop().catch(() => undefined);
-              scannerRef.current = null;
-              if (mounted) {
-                try { navigator.vibrate?.(200); } catch { /* noop */ }
-                onScanRef.current(digits);
-              }
-            }
-          };
-
-          const traseira = cameras.find((c) => /back|rear|environment|traseir/i.test(c.label || ''))
-            || cameras[cameras.length - 1]
-            || cameras[0];
-
-          const alvos = [];
-          if (traseira?.id) alvos.push(traseira.id);
-          cameras.forEach((c) => { if (c.id && !alvos.includes(c.id)) alvos.push(c.id); });
-          alvos.push({ facingMode: 'environment' });
-
-          let ultimoErro = null;
-
-          for (const alvo of alvos) {
-            if (!mounted) return false;
-            const scanner = new Html5Qrcode(READER_ID);
-            try {
-              await scanner.start(alvo, config, onSuccess, () => undefined);
-              scannerRef.current = scanner;
-
-              try {
-                const caps = scanner.getRunningTrackCapabilities();
-                if (caps && 'torch' in caps) {
-                  await scanner.applyVideoConstraints({ torch: true });
-                  flashStateRef.current = true;
-                  setFlashOn(true);
-                  setFlashDisponivel(true);
-                }
-              } catch { /* noop */ }
-
-              if (mounted) setStatus('escaneando');
-              return true;
-            } catch (err) {
-              ultimoErro = err;
-              try { scanner.clear(); } catch { /* noop */ }
-            }
-          }
-
-          throw ultimoErro || new Error('Falha ao inicializar a câmera');
-        } catch (err) {
-          if (!mounted) return false;
-          setStatus('erro');
-          const name = err?.name;
-          const msg = err?.message || '';
-          if (name === 'NotAllowedError' || msg.includes('Permission')) {
-            setErro('Acesso à câmera bloqueado. Permita o acesso nas configurações do navegador e recarregue a página.');
-          } else if (name === 'NotFoundError' || msg.includes('NotFound')) {
-            setErro('Nenhuma câmera encontrada no dispositivo.');
-          } else if (name === 'NotReadableError' || msg.includes('NotReadable') || msg.includes('in use')) {
-            setErro('A câmera está sendo usada por outro aplicativo. Feche-o e tente novamente.');
-          } else if (name === 'OverconstrainedError') {
-            setErro('Câmera não suporta a resolução necessária.');
-          } else {
-            setErro(msg || 'Erro ao iniciar câmera.');
-          }
-          return false;
+    // Todas as operações aguardam a sessão anterior, inclusive no StrictMode.
+    enfileirar(async () => {
+      if (session.cancelada || session.modo !== 'camera') return;
+      setStatus('iniciando'); setErro(''); setFlashOn(false); setFlashDisponivel(false);
+      try {
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+          throw new Error('A câmera exige HTTPS ou localhost. Use uma imagem ou cole a linha digitável no cadastro.');
         }
-      };
-
-      await tentarIniciar();
-    };
-
-    (async () => { await iniciar(); })();
-
-    return () => {
-      mounted = false;
-      setFlashOn(false);
-      setFlashDisponivel(false);
-      flashStateRef.current = false;
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => undefined);
-        scannerRef.current = null;
+        const alvos = [{ facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }];
+        let ultimoErro;
+        for (let i = 0; i < alvos.length; i++) {
+          if (session.cancelada || session.modo !== 'camera') return;
+          session.scanner = new Html5Qrcode(reader.id, CONFIG);
+          try {
+            await session.scanner.start({ facingMode: 'environment' }, {
+              fps: 5,
+              aspectRatio: 4 / 3,
+              videoConstraints: { ...alvos[i], aspectRatio: { ideal: 4 / 3 } },
+              // Manter resolução suficiente para as barras estreitas do ITF de 44 dígitos.
+              qrbox: (width, height) => ({ width: Math.floor(width * 0.94), height: Math.floor(height * 0.3) }),
+            }, aceitar, () => undefined);
+            await aguardarVideo(session.scanner);
+            if (session.cancelada || session.modo !== 'camera') { await liberar(session); return; }
+            try {
+              const caps = session.scanner.getRunningTrackCapabilities();
+              setFlashDisponivel(caps.torch === true);
+            } catch { /* Câmera sem consulta de capacidades. */ }
+            if (!session.entregue) setStatus('escaneando');
+            return;
+          } catch (err) {
+            ultimoErro = err;
+            await liberar(session);
+            if (/NotAllowed|Permission|denied/i.test(String(err?.name) + ' ' + err)) throw err;
+            if (i === 0 && !session.cancelada && session.modo === 'camera') {
+              const cameras = await Html5Qrcode.getCameras();
+              cameras.sort((a, b) => Number(/back|rear|traseir/i.test(b.label)) - Number(/back|rear|traseir/i.test(a.label)));
+              alvos.push(...cameras.map((c) => ({ deviceId: { exact: c.id }, width: { ideal: 1920 } })));
+            }
+          }
+        }
+        throw ultimoErro || new Error('Nenhuma câmera encontrada.');
+      } catch (err) {
+        if (!session.cancelada && session.modo === 'camera') { setStatus('erro'); setErro(mensagemCamera(err)); }
       }
+    });
+    return () => {
+      session.cancelada = true;
+      observer.disconnect();
+      // A biblioteca precisa de um elemento com dimensões até start() concluir.
+      // Preservá-lo fora da tela evita vazamento ao fechar durante a permissão.
+      Object.assign(reader.style, { position: 'fixed', left: '-10000px', top: '0', transform: 'none' });
+      reader.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(reader);
+      enfileirar(async () => {
+        try { await liberar(session); } finally { reader.remove(); }
+      });
     };
-  }, [aberto]);
+  }, [aberto, tentativa]);
 
   const toggleFlash = async () => {
-    const scanner = scannerRef.current;
-    if (!scanner) return;
-    const novoEstado = !flashStateRef.current;
-    flashStateRef.current = novoEstado;
-    setFlashOn(novoEstado);
+    const session = sessionRef.current;
+    if (!session?.scanner || session.cancelada || session.modo !== 'camera') return;
     try {
-      await scanner.applyVideoConstraints({ torch: novoEstado });
-    } catch {
-      flashStateRef.current = !novoEstado;
-      setFlashOn(!novoEstado);
-    }
+      await enfileirar(async () => {
+        if (!session.scanner?.isScanning || session.cancelada) return;
+        await session.scanner.applyVideoConstraints({ advanced: [{ torch: !flashOn }] });
+        if (!session.cancelada) setFlashOn(!flashOn);
+      });
+    } catch { setErro('Não foi possível alterar a lanterna nesta câmera.'); }
   };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    setStatus('iniciando');
-    setErro('');
-
-    const uid = `tmp-scan-${Date.now()}`;
-    const el = document.createElement('div');
-    el.id = uid;
-    el.style.display = 'none';
-    document.body.appendChild(el);
-
-    try {
-      const scanner = new Html5Qrcode(uid);
-      const result = await scanner.scanFile(file, false);
-      scanner.clear();
-      const digits = result.replace(/\D/g, '');
-      if (digits.length >= 44) {
-        try { navigator.vibrate?.(200); } catch { /* noop */ }
-        onScanRef.current(digits);
-      } else {
-        setStatus('erro');
-        setErro('Código de barras não reconhecido. Tente outra imagem.');
-      }
-    } catch {
-      setStatus('erro');
-      setErro('Não foi possível ler o código desta imagem.');
-    } finally {
-      document.body.removeChild(el);
-    }
     e.target.value = '';
+    const session = sessionRef.current;
+    if (!file || !session || session.cancelada || session.entregue || session.modo === 'arquivo') return;
+    session.modo = 'arquivo';
+    setStatus('processando'); setErro(''); setFlashOn(false); setFlashDisponivel(false);
+    await enfileirar(async () => {
+      let leuCodigo = false;
+      try {
+        await liberar(session);
+        if (session.cancelada) return;
+        session.scanner = new Html5Qrcode(session.reader.id, CONFIG);
+        const resultado = await session.scanner.scanFile(file, false);
+        leuCodigo = true;
+        const codigo = normalizarBoleto(resultado);
+        await liberar(session);
+        if (!session.cancelada) {
+          session.entregue = true;
+          onScanRef.current(codigo);
+        }
+      } catch (err) {
+        if (!session.cancelada) {
+          setStatus('erro');
+          setErro(leuCodigo && err instanceof Error ? err.message : 'Não foi possível ler a imagem. Escolha uma foto nítida com todas as barras e margens brancas, na horizontal.');
+        }
+      } finally {
+        await liberar(session);
+        session.modo = 'parada';
+      }
+    });
   };
 
   if (!aberto) return null;
-
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center px-4">
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center px-4" role="dialog" aria-modal="true" aria-label="Escanear boleto">
       <div className="fixed inset-0 bg-black/80" onClick={onFechar} />
-
       <div className="relative z-10 w-full max-w-lg">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-white">Escanear Código de Barras</h3>
-          <button onClick={onFechar}
-            className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] transition-all duration-200">
-            &times;
-          </button>
+          <h3 className="text-base font-bold text-white">Escanear código de barras do boleto</h3>
+          <button type="button" onClick={onFechar} aria-label="Fechar scanner" className="text-white text-xl">&times;</button>
         </div>
-
-        <div className="relative rounded-2xl overflow-hidden bg-black border border-atend-border">
-          <div id={READER_ID} className="w-full aspect-[4/3]" />
-
-          {status === 'escaneando' && (
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-0 bg-black/10" />
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[85%] h-[100px]">
-                <div className="absolute inset-0 border-2 border-atend-verde/70 rounded-lg shadow-[0_0_15px_rgba(46,204,113,0.25)]" />
-                <div className="absolute -top-[2px] -left-[2px] w-5 h-5 border-t-2 border-l-2 border-atend-verde rounded-tl" />
-                <div className="absolute -top-[2px] -right-[2px] w-5 h-5 border-t-2 border-r-2 border-atend-verde rounded-tr" />
-                <div className="absolute -bottom-[2px] -left-[2px] w-5 h-5 border-b-2 border-l-2 border-atend-verde rounded-bl" />
-                <div className="absolute -bottom-[2px] -right-[2px] w-5 h-5 border-b-2 border-r-2 border-atend-verde rounded-br" />
-                <div className="absolute left-1/2 -translate-x-1/2 top-0 w-[95%] h-0.5 bg-gradient-to-r from-transparent via-atend-verde/90 to-transparent animate-scanner-line" />
-              </div>
-
-              {flashDisponivel && (
-                <button type="button" onClick={toggleFlash}
-                  className="absolute top-3 right-3 pointer-events-auto z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 transition-all active:scale-90 border border-white/10">
-                  {flashOn ? (
-                    <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M7 2v11h3v9l7-12h-4l4-8z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-slate-300" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M7 2v11h3v9l7-12h-4l4-8z" />
-                    </svg>
-                  )}
-                </button>
-              )}
+        <div ref={containerRef} className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-black border border-atend-border">
+          {status === 'escaneando' && flashDisponivel && (
+            <button type="button" onClick={toggleFlash} className="absolute top-3 right-3 bg-black/70 text-white rounded-lg px-3 py-2">
+              {flashOn ? 'Desligar lanterna' : 'Ligar lanterna'}
+            </button>
+          )}
+          {(status === 'iniciando' || status === 'processando') && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-white" role="status">
+              {status === 'iniciando' ? 'Iniciando câmera...' : 'Processando leitura...'}
             </div>
           )}
-
-          {status === 'iniciando' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-              <div className="text-center">
-                <div className="w-8 h-8 border-2 border-atend-verde border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-sm text-slate-300">Iniciando câmera...</p>
-              </div>
-            </div>
-          )}
-
-          {status === 'erro' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-              <div className="text-center px-6 py-8">
-                <svg className="w-10 h-10 text-rose-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                </svg>
-                <p className="text-rose-400 text-sm mb-2">{erro}</p>
-                <p className="text-slate-500 text-xs mb-4">Tente usar uma foto do código de barras.</p>
-                <label className="inline-flex items-center gap-2 bg-atend-verde/20 hover:bg-atend-verde/30 text-atend-verde text-sm font-medium px-5 py-2.5 rounded-lg cursor-pointer transition-all active:scale-95 border border-atend-verde/30">
-                  Escolher imagem
-                  <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                </label>
-              </div>
-            </div>
-          )}
+          {status === 'erro' && <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-6 text-center text-rose-400" role="alert">{erro}</div>}
         </div>
-
-        <div className="flex gap-3 mt-4">
-          {status !== 'erro' && (
-            <label className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] cursor-pointer text-slate-300 text-sm font-medium py-2.5 rounded-lg transition-all border border-slate-700">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Escolher imagem
-              <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-            </label>
-          )}
-          <button onClick={onFechar}
-            className={`${status === 'erro' ? 'flex-1' : 'flex-[0.5]'} bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-300 text-sm font-medium py-2.5 rounded-lg transition-all border border-slate-700`}>
-            {status === 'erro' ? 'Fechar' : 'Cancelar'}
-          </button>
+        {erro && status !== 'erro' && <p className="text-amber-300 text-sm mt-2" role="status">{erro}</p>}
+        <div className="flex flex-wrap gap-3 mt-4">
+          <label className={'flex-1 text-center bg-slate-800 text-slate-300 text-sm py-2.5 rounded-lg ' + (status === 'processando' ? 'opacity-50' : 'cursor-pointer')}>
+            Escolher imagem
+            <input type="file" accept="image/*" disabled={status === 'processando'} onChange={handleFileUpload} className="hidden" />
+          </label>
+          {status === 'erro' && <button type="button" onClick={() => setTentativa((v) => v + 1)} className="bg-slate-800 text-slate-300 text-sm px-3 rounded-lg">Tentar câmera</button>}
+          <button type="button" onClick={onFechar} className="bg-slate-800 text-slate-300 text-sm px-4 py-2.5 rounded-lg">Fechar</button>
         </div>
-
-        <p className="text-center text-xs text-slate-600 mt-3">
-          Posicione o código de barras horizontalmente dentro da área verde
-        </p>
+        <p className="text-center text-xs text-slate-300 mt-3">Posicione todas as barras na horizontal dentro da área de leitura, incluindo as margens brancas. Para colar a linha digitável, feche o scanner e use o campo do cadastro.</p>
       </div>
-
-      <style>{`
-        @keyframes scanner-line-move {
-          0%, 100% { top: 0; opacity: 0.3; }
-          50% { top: calc(100% - 2px); opacity: 1; }
-        }
-        .animate-scanner-line {
-          animation: scanner-line-move 2s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }

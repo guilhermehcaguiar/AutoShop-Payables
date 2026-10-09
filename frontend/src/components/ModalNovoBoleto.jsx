@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../api.js';
 import { parseValorBR, formatarValorBR } from '../formatar.js';
 import ScannerBoleto from './ScannerBoleto.jsx';
+import { normalizarBoleto } from '../boleto.js';
 
 function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [fornecedor, setFornecedor] = useState('');
@@ -42,6 +43,7 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
         setDescricao('');
       }
       setRecorrente(false);
+      setMostrarScanner(false);
       setNMeses(3);
       setErro('');
     }, 0);
@@ -96,10 +98,18 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       setCarregando(false);
       return;
     }
+    let codigoNormalizado;
+    try {
+      codigoNormalizado = normalizarBoleto(codigoBarras);
+    } catch (err) {
+      setErro(err.message);
+      setCarregando(false);
+      return;
+    }
     const bodyBase = {
       fornecedor,
       valor: valorNumerico,
-      codigo_barras: codigoBarras || null,
+      codigo_barras: codigoNormalizado,
       categoria: categoria || null,
       descricao: descricao || null,
     };
@@ -205,10 +215,10 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Código de Barras</label>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Código de barras ou linha digitável</label>
             <div className="flex gap-2">
-              <input type="text" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value.replace(/\D/g, ''))}
-                placeholder="Código do boleto"
+              <input type="text" inputMode="numeric" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)}
+                placeholder="44, 47 ou 48 dígitos"
                 className="flex-1 bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
                 required />
               <button type="button" onClick={() => setMostrarScanner(true)}
@@ -288,7 +298,7 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
       </div>
 
       <ScannerBoleto
-        aberto={mostrarScanner}
+        aberto={aberto && mostrarScanner}
         onScan={(codigo) => { setCodigoBarras(codigo); setMostrarScanner(false); }}
         onFechar={() => setMostrarScanner(false)}
       />
