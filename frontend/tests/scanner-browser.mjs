@@ -43,7 +43,7 @@ const paginaTeste = async (server, _req, res) => {
   res.end(await server.transformIndexHtml('/scanner-test', html));
 };
 const server = await createServer({
-  optimizeDeps: { include: ['react', 'react-dom/client', 'html5-qrcode', 'html5-qrcode/third_party/zxing-js.umd.js'] },
+  optimizeDeps: { include: ['react', 'react-dom/client', 'html5-qrcode', 'html5-qrcode/third_party/zxing-js.umd'] },
   server: { host: '127.0.0.1', port: 0, watch: { ignored: ['**/.local/**'] } },
   plugins: [{ name: 'scanner-test-page', configureServer(server) {
     server.middlewares.use('/scanner-test', (req, res) => paginaTeste(server, req, res));

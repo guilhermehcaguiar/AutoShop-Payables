@@ -1,5 +1,5 @@
 // Reutiliza o ZXing já distribuído com html5-qrcode, com busca ampliada de linhas.
-import ZXing from 'html5-qrcode/third_party/zxing-js.umd.js';
+import * as ZXing from 'html5-qrcode/third_party/zxing-js.umd';
 import { normalizarBoleto } from './boleto.js';
 
 const hints = new Map([

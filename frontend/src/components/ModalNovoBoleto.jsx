@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { apiFetch } from '../api.js';
 import { parseValorBR, formatarValorBR } from '../formatar.js';
-import ScannerBoleto from './ScannerBoleto.jsx';
 import { normalizarBoleto } from '../boleto.js';
+
+const ScannerBoleto = lazy(() => import('./ScannerBoleto.jsx'));
 
 function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
   const [fornecedor, setFornecedor] = useState('');
@@ -297,11 +298,20 @@ function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
         </form>
       </div>
 
-      <ScannerBoleto
-        aberto={aberto && mostrarScanner}
-        onScan={(codigo) => { setCodigoBarras(codigo); setMostrarScanner(false); }}
-        onFechar={() => setMostrarScanner(false)}
-      />
+      {mostrarScanner && (
+        <Suspense fallback={
+          <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/80 text-white">
+            <p role="status">Abrindo scanner...</p>
+            <button type="button" onClick={() => setMostrarScanner(false)} className="rounded-lg bg-slate-800 px-4 py-2">Cancelar</button>
+          </div>
+        }>
+          <ScannerBoleto
+            aberto={aberto}
+            onScan={(codigo) => { setCodigoBarras(codigo); setMostrarScanner(false); }}
+            onFechar={() => setMostrarScanner(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

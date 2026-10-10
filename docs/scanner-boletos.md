@@ -42,6 +42,7 @@ Na pasta frontend:
 ```sh
 npm test
 npm run build
+npm run test:login:browser
 npm run test:scanner:browser
 ```
 
@@ -52,6 +53,12 @@ durante inicialização, permissão negada, imagem inválida e nova leitura vál
 com telas de 390 e 360 pixels, barras fora da faixa central, foto de página inteira
 com contraste reduzido e código na vertical. Emulação de tela no Chromium não equivale a Safari
 ou a um aparelho físico.
+
+O teste de login serve o build de produção de `frontend/dist`. Verifica que a
+aplicação abre sem erro de JavaScript, testa o acesso com API simulada e abre o
+scanner para ler uma imagem ITF e preencher o cadastro. Isso cobre a integração
+da biblioteca no bundle final, além dos testes do scanner no servidor de desenvolvimento.
+Para reproduzir o ambiente publicado, use as versões do lockfile (`npm ci`).
 
 Antes de publicar, validar em Android e iPhone reais por HTTPS:
 
