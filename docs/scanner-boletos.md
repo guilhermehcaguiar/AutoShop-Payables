@@ -23,8 +23,13 @@ aparelho: acessar o IP do computador por HTTP no celular não permite câmera.
 No Android, testar no Chrome; no iPhone/iPad, no Safari. O leitor pede a câmera
 traseira e a biblioteca configura vídeo inline, necessário no iOS.
 
-O processamento mantém largura de 1280 pixels e a interface escala para a tela.
-Isso evita reduzir as barras estreitas à largura do celular. A lanterna é opcional,
+O leitor central mantém largura de 1280 pixels e a interface escala para a tela.
+Uma segunda leitura analisa o quadro inteiro na resolução da câmera, com busca
+ampliada de linhas (TRY_HARDER) e dois métodos de contraste. Assim, as barras
+podem ser reconhecidas fora da faixa central e na vertical. Imagens enviadas
+também usam essa busca na resolução original. Ambas as leituras exigem código
+válido e a segunda leitura é encerrada ao fechar ou trocar por arquivo.
+A lanterna é opcional,
 fica desligada inicialmente e só aparece quando a câmera informa suporte.
 Se a câmera for negada ou indisponível, o upload e a entrada manual continuam disponíveis.
 Uploads aceitam imagens compatíveis com o navegador, não PDFs. Para boletos em
@@ -44,7 +49,8 @@ O teste de navegador requer Microsoft Edge no Windows. Para outro Chromium,
 defina SCANNER_BROWSER com o caminho do executável. Ele cria dados temporários
 em frontend/.local e usa uma câmera sintética ITF. Verifica StrictMode, fechamento
 durante inicialização, permissão negada, imagem inválida e nova leitura válida,
-com telas de 390 e 360 pixels. Emulação de tela no Chromium não equivale a Safari
+com telas de 390 e 360 pixels, barras fora da faixa central, foto de página inteira
+com contraste reduzido e código na vertical. Emulação de tela no Chromium não equivale a Safari
 ou a um aparelho físico.
 
 Antes de publicar, validar em Android e iPhone reais por HTTPS:

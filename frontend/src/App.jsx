@@ -13,12 +13,14 @@ import AdminPage from './components/AdminPage';
 import MetasPage from './components/MetasPage';
 import PaginaPerfil from './components/PaginaPerfil';
 import { SkeletonLinha, SkeletonCard } from './components/Skeleton';
+import Login from './components/Login';
 
 function App() {
   // === STATES ===
   const [estaLogado, setEstaLogado] = useState(false);
   const [username, setUsername] = useState('');
   const [senha, setSenha] = useState('');
+  const [carregandoLogin, setCarregandoLogin] = useState(false);
   const [erro, setErro] = useState('');
   const [usuarioPerfil, setUsuarioPerfil] = useState({ nome: '', sexo: '' });
   const [boletos, setBoletos] = useState([]);
@@ -136,6 +138,8 @@ function App() {
   // === HANDLERS ===
   const lidarComLogin = async (e) => {
     e.preventDefault();
+    if (carregandoLogin) return;
+    setCarregandoLogin(true);
     setErro('');
 
     const dadosFormulario = new URLSearchParams();
@@ -164,6 +168,8 @@ function App() {
       }
     } catch {
       setErro('Não foi possível conectar ao servidor de banco de dados.');
+    } finally {
+      setCarregandoLogin(false);
     }
   };
 
@@ -240,13 +246,6 @@ function App() {
     });
   };
 
-  const toggleSelecionarTodos = () => {
-    setSelecionados((prev) => {
-      if (prev.size === boletosFiltrados.length && boletosFiltrados.length > 0) return new Set();
-      return new Set(boletosFiltrados.map((b) => b.id));
-    });
-  };
-
   const hoje = new Date().toLocaleDateString('en-CA');
 
   const fornecedoresDisponiveis = useMemo(() => {
@@ -282,6 +281,13 @@ function App() {
     }
     return lista.sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
   }, [boletos, mesSelecionado, dataInicio, dataFim, filtroStatus, filtroDia, filtroFornecedor, hoje]);
+
+  const toggleSelecionarTodos = () => {
+    setSelecionados((prev) => {
+      if (prev.size === boletosFiltrados.length && boletosFiltrados.length > 0) return new Set();
+      return new Set(boletosFiltrados.map((b) => b.id));
+    });
+  };
 
   const totalPago = useMemo(
     () => boletos.filter((b) => {
@@ -667,35 +673,8 @@ function App() {
 
   if (!estaLogado) {
     return (
-      <div className="min-h-screen bg-atend-bg flex items-center justify-center font-sans px-4">
-        <div className="w-full max-w-md bg-atend-card border border-atend-border p-8 rounded-2xl shadow-2xl relative overflow-hidden animate-fade-in-scale">
-          <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71]"></div>
-          <div className="text-center mb-8">
-            <h1 className="text-xl tracking-wide uppercase text-white"
-              style={{ fontFamily: "'Sonic Extra Bold', 'Segoe UI', 'Arial Black', system-ui, sans-serif", fontWeight: 900 }}>
-              FINANCEIRO <span className="text-atend-verde">ATEND-CAR</span>
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">Restrito para a Gestão Financeira</p>
-          </div>
-          <form onSubmit={lidarComLogin} className="space-y-5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Usuário:</label>
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex: user"
-                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Senha:</label>
-              <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)}
-                placeholder="••••••"
-                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
-            </div>
-            {erro && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg p-3 text-center animate-pulse">⚠️ {erro}</div>}
-            <button type="submit"
-              className="w-full bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 font-bold uppercase tracking-wider text-xs py-3.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10 mt-2">Login</button>
-          </form>
-        </div>
-      </div>
+      <Login username={username} setUsername={setUsername} senha={senha} setSenha={setSenha}
+        erro={erro} carregando={carregandoLogin} onSubmit={lidarComLogin} />
     );
   }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { normalizarBoleto } from '../boleto.js';
+import { lerImagemBoleto, observarVideoBoleto } from '../leitorBoleto.js';
 
 const READER_ID = 'boleto-scanner-reader';
 let proximaSessao = 0;
@@ -17,6 +18,8 @@ async function aguardarVideo(scanner) {
 }
 
 async function liberar(session) {
+  session.pararLeitura?.();
+  session.pararLeitura = null;
   if (!session.scanner) return;
   const video = session.reader.querySelector('video');
   const tracks = video?.srcObject?.getTracks() || [];
@@ -114,6 +117,7 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
             }, aceitar, () => undefined);
             await aguardarVideo(session.scanner);
             if (session.cancelada || session.modo !== 'camera') { await liberar(session); return; }
+            session.pararLeitura = observarVideoBoleto(reader.querySelector('video'), aceitar);
             try {
               const caps = session.scanner.getRunningTrackCapabilities();
               setFlashDisponivel(caps.torch === true);
@@ -138,6 +142,7 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
     });
     return () => {
       session.cancelada = true;
+      session.pararLeitura?.();
       observer.disconnect();
       // A biblioteca precisa de um elemento com dimensões até start() concluir.
       // Preservá-lo fora da tela evita vazamento ao fechar durante a permissão.
@@ -175,7 +180,7 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
         await liberar(session);
         if (session.cancelada) return;
         session.scanner = new Html5Qrcode(session.reader.id, CONFIG);
-        const resultado = await session.scanner.scanFile(file, false);
+        const resultado = await lerImagemBoleto(file) || await session.scanner.scanFile(file, false);
         leuCodigo = true;
         const codigo = normalizarBoleto(resultado);
         await liberar(session);
@@ -226,7 +231,7 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
           {status === 'erro' && <button type="button" onClick={() => setTentativa((v) => v + 1)} className="bg-slate-800 text-slate-300 text-sm px-3 rounded-lg">Tentar câmera</button>}
           <button type="button" onClick={onFechar} className="bg-slate-800 text-slate-300 text-sm px-4 py-2.5 rounded-lg">Fechar</button>
         </div>
-        <p className="text-center text-xs text-slate-300 mt-3">Posicione todas as barras na horizontal dentro da área de leitura, incluindo as margens brancas. Para colar a linha digitável, feche o scanner e use o campo do cadastro.</p>
+        <p className="text-center text-xs text-slate-300 mt-3">Enquadre o código inteiro e as margens brancas. A leitura também busca fora da faixa central. Mantenha a câmera firme e afaste um pouco se as barras estiverem desfocadas. Para colar a linha digitável, use o campo do cadastro.</p>
       </div>
     </div>
   );

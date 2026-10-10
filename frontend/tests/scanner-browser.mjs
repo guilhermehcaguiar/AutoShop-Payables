@@ -17,7 +17,7 @@ const imagem = imagemITF(codigo, 3);
 const y = Buffer.alloc(frameWidth * frameHeight, 235);
 for (let row = 0; row < imagem.height; row++) {
   for (let col = 0; col < imagem.width; col++) {
-    y[(row + 420) * frameWidth + col + Math.floor((frameWidth - imagem.width) / 2)] = imagem.pixels[row * imagem.width + col] ? 235 : 16;
+    y[(row + 130) * frameWidth + col + Math.floor((frameWidth - imagem.width) / 2)] = imagem.pixels[row * imagem.width + col] ? 235 : 16;
   }
 }
 const capture = path.join(workspace, 'boleto.y4m');
@@ -28,8 +28,8 @@ await fs.writeFile(capture, Buffer.concat([
 
 const paginaTeste = async (server, _req, res) => {
   const html = `<!doctype html><html><head><link rel="icon" href="data:,"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module">
-    import React from '/node_modules/.vite/deps/react.js';
-    import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+    import React from 'react';
+    import ReactDOM from 'react-dom/client';
     import Scanner from '/src/components/ScannerBoleto.jsx';
     import '/src/index.css';
     const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -43,6 +43,7 @@ const paginaTeste = async (server, _req, res) => {
   res.end(await server.transformIndexHtml('/scanner-test', html));
 };
 const server = await createServer({
+  optimizeDeps: { include: ['react', 'react-dom/client', 'html5-qrcode', 'html5-qrcode/third_party/zxing-js.umd.js'] },
   server: { host: '127.0.0.1', port: 0, watch: { ignored: ['**/.local/**'] } },
   plugins: [{ name: 'scanner-test-page', configureServer(server) {
     server.middlewares.use('/scanner-test', (req, res) => paginaTeste(server, req, res));
@@ -108,7 +109,7 @@ try {
   await cdp('Page.navigate', { url: 'http://127.0.0.1:' + port + '/scanner-test' });
   await esperar('window.resultados?.length === 1');
   assert.equal(await evaluate('window.resultados[0]'), codigo);
-  console.log('OK: câmera ITF em tela de iPhone (390px), StrictMode e encerramento após leitura');
+  console.log('OK: câmera ITF fora da faixa central em tela de 390px, StrictMode e encerramento após leitura');
 
   // Impedir a leitura automática para exercitar troca por arquivo e fechamento durante start.
   await evaluate(`window.trackStops = 0; window.videoStreams = []; const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
@@ -144,8 +145,36 @@ try {
   await upload(imagem.pixels, imagem.width, imagem.height);
   await esperar('window.resultados.length === 2');
   assert.equal(await evaluate('window.resultados[1]'), codigo);
+  // Foto de uma página inteira: código pequeno, fora do centro e com contraste menor.
+  const pageWidth = 1800;
+  const pageHeight = 2400;
+  const page = new Uint8ClampedArray(pageWidth * pageHeight).fill(220);
+  for (let row = 0; row < imagem.height; row++) {
+    for (let col = 0; col < imagem.width; col++) {
+      page[(row + 2050) * pageWidth + col + 200] = imagem.pixels[row * imagem.width + col] ? 220 : 75;
+    }
+  }
+  await evaluate('window.abrir(true)');
+  await esperar('document.body.innerText.includes("Acesso à câmera bloqueado")');
+  await upload(page, pageWidth, pageHeight);
+  await esperar('window.resultados.length === 3');
+  assert.equal(await evaluate('window.resultados[2]'), codigo);
+
+  // Código na vertical: TRY_HARDER deve tentar também a imagem rotacionada.
+  const rotated = new Uint8ClampedArray(imagem.pixels.length);
+  for (let row = 0; row < imagem.height; row++) {
+    for (let col = 0; col < imagem.width; col++) {
+      rotated[col * imagem.height + imagem.height - row - 1] = imagem.pixels[row * imagem.width + col];
+    }
+  }
+  await evaluate('window.abrir(true)');
+  await esperar('document.body.innerText.includes("Acesso à câmera bloqueado")');
+  await upload(rotated, imagem.height, imagem.width);
+  await esperar('window.resultados.length === 4');
+  assert.equal(await evaluate('window.resultados[3]'), codigo);
   assert.equal(errors.length, 0, errors.join('\n'));
   console.log('OK: câmera bloqueada, imagem inválida, nova tentativa e imagem ITF válida em tela Android (360px)');
+  console.log('OK: página inteira com barras fora do centro, contraste reduzido e código na vertical');
 } finally {
   socket?.close();
   browser.kill();
