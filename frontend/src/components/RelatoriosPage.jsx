@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../api.js';
+import Icon from './Icon.jsx';
+import AccordionSection from './AccordionSection.jsx';
+import { useState, useEffect, useCallback } from 'react';
+import { apiFetch, exigirSucesso } from '../api.js';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 import { SkeletonResumo, SkeletonGrafico } from './Skeleton';
 import { jsPDF } from 'jspdf';
@@ -7,28 +9,6 @@ import html2canvas from 'html2canvas';
 
 const CORES = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#3498db', '#f39c12'];
 
-function AccordionSection({ indice, icone, titulo, descricao, children, aberto, onToggle }) {
-  return (
-    <div className="border-b border-atend-border last:border-b-0">
-      <button onClick={() => onToggle(indice)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-all duration-200 active:scale-[0.98] focus:outline-none">
-        <div className="flex items-center gap-3">
-          <span className="text-lg">{icone}</span>
-          <div className="text-left">
-            <h3 className="text-sm font-bold text-white">{titulo}</h3>
-            <p className="text-xs text-slate-400">{descricao}</p>
-          </div>
-        </div>
-        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${aberto ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
-      </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${aberto ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-        <div className="px-5 pb-4">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function RelatoriosPage({ mostrarToast }) {
   // === STATES ===
@@ -48,9 +28,12 @@ function RelatoriosPage({ mostrarToast }) {
   const [exportando, setExportando] = useState(false);
 const [pdfPronto, setPdfPronto] = useState(null);
 
+  const [erroRelatorio, setErroRelatorio] = useState('');
+
   // === EFFECTS / API ===
-  const fetchRelatorio = async () => {
-    setCarregando(true);
+  const fetchRelatorio = useCallback(async (signal) => {
+    setCarregando(true); setErroRelatorio('');
+    if (diaInicio && diaFim && Number(diaInicio) > Number(diaFim)) { setErroRelatorio('O dia inicial deve ser anterior ao dia final.'); setCarregando(false); return; }
     const token = localStorage.getItem('token');
     const paramsBase = new URLSearchParams({ ano, mes });
     if (diaInicio) paramsBase.set('dia_inicio', diaInicio);
@@ -63,28 +46,36 @@ const [pdfPronto, setPdfPronto] = useState(null);
     }
     try {
       const [respM, respF, respC, respP, respE] = await Promise.all([
-        apiFetch(`/relatorio/mensal?${paramsBase}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/relatorio/fornecedores?${paramsF}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/relatorio/categorias?${paramsC}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/boletos/projecao-fluxo?${paramsBase}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        apiFetch(`/boletos/evolucao-mensal`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/mensal?${paramsBase}`, { signal, headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/fornecedores?${paramsF}`, { signal, headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/relatorio/categorias?${paramsC}`, { signal, headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/boletos/projecao-fluxo?${paramsBase}`, { signal, headers: { 'Authorization': `Bearer ${token}` } }),
+        apiFetch(`/boletos/evolucao-mensal`, { signal, headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
-      if (respM.ok) setMensal(await respM.json());
-      if (respF.ok) setPorFornecedor(await respF.json());
-      if (respC.ok) setPorCategoria(await respC.json());
-      if (respP.ok) setProjecao(await respP.json());
-      if (respE.ok) setEvolucao(await respE.json());
-    } catch { /* noop */ } finally { setCarregando(false); }
-  };
+      await Promise.all([respM, respF, respC, respP, respE].map(r => exigirSucesso(r)));
+      const [dadosM, dadosF, dadosC, dadosP, dadosE] = await Promise.all([respM, respF, respC, respP, respE].map(r => r.json()));
+      if (signal?.aborted) return;
+      setMensal(dadosM); setPorFornecedor(dadosF); setPorCategoria(dadosC); setProjecao(dadosP); setEvolucao(dadosE);
+    } catch (e) { if (!signal?.aborted) setErroRelatorio(e.message); } finally { if (!signal?.aborted) setCarregando(false); }
+  }, [ano, mes, diaInicio, diaFim, filtroStatusRel]);
 
-  useEffect(() => { const t = setTimeout(fetchRelatorio, 0); return () => clearTimeout(t); }, [ano, mes, diaInicio, diaFim, filtroStatusRel]);
+  useEffect(() => { const controller = new AbortController(); const t = setTimeout(() => fetchRelatorio(controller.signal), 0); return () => { clearTimeout(t); controller.abort(); }; }, [fetchRelatorio]);
 
   const formatar = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const maxTotal = Math.max(...porFornecedor.map((f) => f.total), 1);
 
   const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase());
 
-  const dias = Array.from({ length: 31 }, (_, i) => i + 1);
+  const dataFiltro = dia => dia ? `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` : '';
+  const alterarDataFiltro = (inicio, valor) => {
+    if (!valor) { (inicio ? setDiaInicio : setDiaFim)(''); return; }
+    const [novoAno, novoMes, dia] = valor.split('-').map(Number);
+    if (novoAno !== ano || novoMes !== mes) {
+      setAno(novoAno); setMes(novoMes);
+      setDiaInicio(''); setDiaFim('');
+    }
+    (inicio ? setDiaInicio : setDiaFim)(String(dia));
+  };
 
   const dadosGrafico = (() => {
     if (!projecao) return [];
@@ -121,6 +112,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
         apiFetch(`/relatorio/mensal?${pdfParams}`),
         apiFetch(`/relatorio/categorias?${pdfParams}`),
       ]);
+      await exigirSucesso(respC);
       if (!respM.ok) { mostrarToast?.('Erro ao carregar dados', 'erro'); setExportando(false); return; }
 
       const m = await respM.json();
@@ -441,31 +433,22 @@ const [pdfPronto, setPdfPronto] = useState(null);
   // === RENDER ===
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 flex-wrap">
-        <h2 className="text-xl font-bold text-white">Relatório {nomeMes} {ano}</h2>
-        <select value={mes} onChange={(e) => { setMes(Number(e.target.value)); setDiaInicio(''); setDiaFim(''); }}
+      <section className="app-section"><div className="section-heading page-heading"><div><h2>Relatórios</h2><p>Confira o fluxo de caixa e os resultados do período.</p></div><Icon name="relatorios" size={24} className="subtle" /></div><div className="report-filters">
+        <select aria-label="Mês do relatório" value={mes} onChange={(e) => { setMes(Number(e.target.value)); setDiaInicio(''); setDiaFim(''); }}
           className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
             <option key={m} value={m}>{new Date(ano, m - 1).toLocaleDateString('pt-BR', { month: 'long' }).replace(/^\w/, (c) => c.toUpperCase())}</option>
           ))}
         </select>
-        <select value={ano} onChange={(e) => setAno(Number(e.target.value))}
+        <select aria-label="Ano do relatório" value={ano} onChange={(e) => { setAno(Number(e.target.value)); setDiaInicio(''); setDiaFim(''); }}
           className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
-          {[agora.getFullYear(), agora.getFullYear() - 1].map((a) => (<option key={a} value={a}>{a}</option>))}
+          {[...new Set([agora.getFullYear() - 1, agora.getFullYear(), agora.getFullYear() + 1, ano])].sort((a, b) => b - a).map((a) => (<option key={a} value={a}>{a}</option>))}
         </select>
-        <select value={diaInicio} onChange={(e) => setDiaInicio(e.target.value)}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
-          <option value="">De</option>
-          {dias.map((d) => (<option key={d} value={d}>Dia {d}</option>))}
-        </select>
-        <select value={diaFim} onChange={(e) => setDiaFim(e.target.value)}
-          className="bg-atend-bg border border-atend-border rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 transition-all duration-200 cursor-pointer active:scale-[0.98]">
-          <option value="">Até</option>
-          {dias.map((d) => (<option key={d} value={d}>Dia {d}</option>))}
-        </select>
-      </div>
+        <div className="field"><label htmlFor="relatorio-inicio">De</label><input id="relatorio-inicio" type="date" value={dataFiltro(diaInicio)} onChange={e => alterarDataFiltro(true, e.target.value)} /></div>
+        <div className="field"><label htmlFor="relatorio-fim">Até</label><input id="relatorio-fim" type="date" value={dataFiltro(diaFim)} onChange={e => alterarDataFiltro(false, e.target.value)} /></div>
+      </div></section>
 
-      {carregando ? (
+      {erroRelatorio ? <div className="notice notice-error" role="alert"><p>{erroRelatorio}</p><button type="button" className="button-secondary" onClick={() => fetchRelatorio()}>Tentar novamente</button></div> : carregando ? (
         <div className="space-y-6">
           <SkeletonResumo cards={3} />
           <SkeletonGrafico />
@@ -478,29 +461,26 @@ const [pdfPronto, setPdfPronto] = useState(null);
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div onClick={() => setFiltroStatusRel(filtroStatusRel === 'Pago' ? '' : 'Pago')}
-              className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent ${filtroStatusRel === 'Pago' ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
-              <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Pago</p>
+            <button type="button" onClick={() => setFiltroStatusRel(filtroStatusRel === 'Pago' ? '' : 'Pago')} aria-pressed={filtroStatusRel === 'Pago'}
+              className="summary-card report-summary group">
+              <div className="summary-label"><span>Total Pago</span><Icon name="check" /></div>
               <p className={`text-2xl font-extrabold tracking-tight ${filtroStatusRel === 'Pago' ? 'text-atend-verde' : 'text-white group-hover:text-atend-verde group-active:text-atend-verde'} transition-colors`}>{mensal ? formatar(mensal.total_pago) : 'R$ 0,00'}</p>
               <p className="text-xs text-slate-500 mt-1">{mensal?.total_boletos || 0} boletos no mês</p>
-            </div>
-            <div onClick={() => setFiltroStatusRel(filtroStatusRel === 'Pendente' ? '' : 'Pendente')}
-              className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent ${filtroStatusRel === 'Pendente' ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
-              <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Pendente</p>
+            </button>
+            <button type="button" onClick={() => setFiltroStatusRel(filtroStatusRel === 'Pendente' ? '' : 'Pendente')} aria-pressed={filtroStatusRel === 'Pendente'}
+              className="summary-card report-summary warning group">
+              <div className="summary-label"><span>Total Pendente</span><Icon name="calendario" /></div>
               <p className={`text-2xl font-extrabold tracking-tight ${filtroStatusRel === 'Pendente' ? 'text-amber-400' : 'text-white group-hover:text-amber-400 group-active:text-amber-400'} transition-colors`}>{mensal ? formatar(mensal.total_pendente) : 'R$ 0,00'}</p>
-            </div>
-            <div onClick={() => setFiltroStatusRel('')}
-              className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-              <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-sky-500/40 to-transparent ${!filtroStatusRel ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`} />
-              <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Total Geral</p>
+            </button>
+            <button type="button" onClick={() => setFiltroStatusRel('')} aria-pressed={!filtroStatusRel}
+              className="summary-card report-summary total group">
+              <div className="summary-label"><span>Total Geral</span><Icon name="boleto" /></div>
               <p className={`text-2xl font-extrabold tracking-tight ${!filtroStatusRel ? 'text-sky-400' : 'text-white group-hover:text-sky-400 group-active:text-sky-400'} transition-colors`}>{mensal ? formatar(mensal.total_pago + mensal.total_pendente) : 'R$ 0,00'}</p>
-            </div>
+            </button>
           </div>
 
-          <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-            <AccordionSection indice={1} icone="📊" titulo="Projeção de Fluxo (Previsto)" descricao="Gráfico de barras com fluxo de caixa projetado" aberto={secaoAberta === 1} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
+          <div className="app-section">
+            <AccordionSection indice={1} icone="relatorios" titulo="Projeção de Fluxo (Previsto)" descricao="Gráfico de barras com fluxo de caixa projetado" aberto={secaoAberta === 1} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               {dadosGrafico.length > 0 ? (
                 <div className="w-full overflow-x-auto" id="chart-pdf-projecao">
                   <ResponsiveContainer width={Math.max(dadosGrafico.length * 120, 400)} height={320}>
@@ -524,7 +504,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
               )}
             </AccordionSection>
 
-            <AccordionSection indice={2} icone="📈" titulo="Evolução Mensal (12 meses)" descricao="Comparativo de pagos vs pendentes ao longo do ano" aberto={secaoAberta === 2} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
+            <AccordionSection indice={2} icone="relatorios" titulo="Evolução Mensal (12 meses)" descricao="Comparativo de pagos vs pendentes ao longo do ano" aberto={secaoAberta === 2} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               {evolucao.length > 0 ? (
                 <div className="w-full overflow-x-auto">
                   <ResponsiveContainer width="100%" height={320}>
@@ -548,10 +528,10 @@ const [pdfPronto, setPdfPronto] = useState(null);
               )}
             </AccordionSection>
 
-            <AccordionSection indice={3} icone="📊" titulo="Por Fornecedor / Categoria" descricao="Distribuição de gastos por fornecedor e categoria" aberto={secaoAberta === 3} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
+            <AccordionSection indice={3} icone="relatorios" titulo="Por Fornecedor / Categoria" descricao="Distribuição de gastos por fornecedor e categoria" aberto={secaoAberta === 3} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">📊 Por Fornecedor</h4>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"><Icon name="fornecedores" size={16} className="inline-icon" /> Por Fornecedor</h4>
                   {porFornecedor.length === 0 ? (
                     <p className="text-xs text-slate-500 italic">Nenhum dado no período.</p>
                   ) : (
@@ -573,7 +553,7 @@ const [pdfPronto, setPdfPronto] = useState(null);
                 </div>
 
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">🏷️ Por Categoria</h4>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"><Icon name="categoria" size={16} className="inline-icon" /> Por Categoria</h4>
                   {porCategoria.length === 0 ? (
                     <p className="text-xs text-slate-500 italic">Nenhuma categoria no período.</p>
                   ) : (
@@ -599,10 +579,10 @@ const [pdfPronto, setPdfPronto] = useState(null);
               </div>
             </AccordionSection>
 
-            <AccordionSection indice={4} icone="📋" titulo="Demonstrativo do Resultado (DRE)" descricao="Resumo financeiro do período" aberto={secaoAberta === 4} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
+            <AccordionSection indice={4} icone="documento" titulo="Demonstrativo do Resultado (DRE)" descricao="Resumo financeiro do período" aberto={secaoAberta === 4} onToggle={(i) => setSecaoAberta(secaoAberta === i ? null : i)}>
               <div className="flex items-center justify-between mb-4">
                 <p className="text-xs text-slate-400">Receitas e despesas do período</p>
-                <button onClick={exportarPDF} disabled={exportando}
+                <button onClick={exportarPDF} disabled={exportando || carregando || !!erroRelatorio}
                   className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition-all duration-200">
                   {exportando ? 'Exportando...' : 'Exportar PDF'}
                 </button>
@@ -680,16 +660,16 @@ const [pdfPronto, setPdfPronto] = useState(null);
             <div className="flex justify-between items-center mb-5 mt-1">
               <h2 className="text-lg font-bold text-white">PDF Pronto</h2>
               <button onClick={() => { URL.revokeObjectURL(pdfPronto.url); setPdfPronto(null); }}
-                className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
+                aria-label="Fechar janela" className="icon-button"><Icon name="fechar" size={20} /></button>
             </div>
             <p className="text-sm text-slate-400 mb-2">Seu relatório foi gerado com sucesso.</p>
             <p className="text-xs text-slate-500 mb-6 truncate">{pdfPronto.nome}</p>
             <a href={pdfPronto.url} target="_blank" rel="noopener noreferrer"
               onClick={() => setTimeout(() => { URL.revokeObjectURL(pdfPronto.url); setPdfPronto(null); }, 5000)}
               className="w-full flex items-center justify-center gap-2 bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold py-3 rounded-xl transition-all duration-200 shadow-lg shadow-atend-verde/10">
-              📄 Abrir PDF
+              <Icon name="documento" size={18} /> Abrir PDF
             </a>
-            <p className="text-xs text-slate-500 text-center mt-3">Toque em "Abrir" e depois no ícone de salvar 📥</p>
+            <p className="text-xs text-slate-500 text-center mt-3">Toque em "Abrir" e depois no ícone de salvar no visualizador de PDF</p>
           </div>
         </div>
       )}

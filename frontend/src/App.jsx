@@ -1,821 +1,158 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { apiFetch } from './api.js';
-import Sidebar from './components/Sidebar';
-import Toast from './components/Toast';
-import ModalNovoBoleto from './components/ModalNovoBoleto';
-import ModalAcaoBoleto from './components/ModalAcaoBoleto';
-import ModalPagamento from './components/ModalPagamento';
-import ConfirmDialog from './components/ConfirmDialog';
-import FornecedoresPage from './components/FornecedoresPage';
-import RelatoriosPage from './components/RelatoriosPage';
-import AuditoriaPage from './components/AuditoriaPage';
-import AdminPage from './components/AdminPage';
-import MetasPage from './components/MetasPage';
-import PaginaPerfil from './components/PaginaPerfil';
-import { SkeletonLinha, SkeletonCard } from './components/Skeleton';
-import Login from './components/Login';
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
+import { apiFetch, apiJson, exigirSucesso } from './api.js';
+import { dataLocal, filtrarBoletos, selecionaveis, resumoPrazo, moeda } from './boletosView.js';
+import Sidebar from './components/Sidebar.jsx';
+import Icon from './components/Icon.jsx';
+import Toast from './components/Toast.jsx';
+import BoletosList from './components/BoletosList.jsx';
+import ModalNovoBoleto from './components/ModalNovoBoleto.jsx';
+import ModalAcaoBoleto from './components/ModalAcaoBoleto.jsx';
+import ModalPagamento from './components/ModalPagamento.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
+import Login from './components/Login.jsx';
 
-function App() {
-  // === STATES ===
+const FornecedoresPage = lazy(() => import('./components/FornecedoresPage.jsx'));
+const RelatoriosPage = lazy(() => import('./components/RelatoriosPage.jsx'));
+const AuditoriaPage = lazy(() => import('./components/AuditoriaPage.jsx'));
+const AdminPage = lazy(() => import('./components/AdminPage.jsx'));
+const MetasPage = lazy(() => import('./components/MetasPage.jsx'));
+const PaginaPerfil = lazy(() => import('./components/PaginaPerfil.jsx'));
+const titulos = { dashboard: 'Resumo financeiro', boletos: 'Contas a pagar', fornecedores: 'Fornecedores', relatorios: 'Relatórios', auditoria: 'Histórico', admin: 'Administração', metas: 'Metas', perfil: 'Meu perfil' };
+const filtrosIniciais = () => ({ mes: dataLocal().slice(0, 7), inicio: '', fim: '', status: 'todos', dia: '', fornecedor: '', busca: '' });
+
+export default function App() {
   const [estaLogado, setEstaLogado] = useState(false);
   const [username, setUsername] = useState('');
   const [senha, setSenha] = useState('');
   const [carregandoLogin, setCarregandoLogin] = useState(false);
   const [erro, setErro] = useState('');
-  const [usuarioPerfil, setUsuarioPerfil] = useState({ nome: '', sexo: '' });
+  const [perfil, setPerfil] = useState({});
   const [boletos, setBoletos] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erroLista, setErroLista] = useState('');
   const [sidebarAberta, setSidebarAberta] = useState(false);
-  const [paginaAtual, setPaginaAtual] = useState('dashboard');
-  const [toast, setToast] = useState({ mensagem: '', tipo: 'sucesso', visivel: false });
-  const [modalAberto, setModalAberto] = useState(false);
-  const [filtroStatus, setFiltroStatus] = useState('todos');
-  const [filtroDia, setFiltroDia] = useState('');
-  const [filtroFornecedor, setFiltroFornecedor] = useState('');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
-  const [selecionados, setSelecionados] = useState(new Set());
-  const [mesSelecionado, setMesSelecionado] = useState(() => {
-    const agora = new Date();
-    return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
-  });
-  const [confirmExcluir, setConfirmExcluir] = useState({ aberto: false, boletoId: null });
-  const [carregandoBoletos, setCarregandoBoletos] = useState(false);
+  const [pagina, setPagina] = useState('dashboard');
   const [tema, setTema] = useState(() => localStorage.getItem('atend-tema') || 'dark');
-  const [boletoEditando, setBoletoEditando] = useState(null);
-  const [notificacoes, setNotificacoes] = useState(null);
-  const [usuarioAdmin, setUsuarioAdmin] = useState(false);
-  const [modalAcao, setModalAcao] = useState({ aberto: false, boleto: null });
-  const [modalPagamento, setModalPagamento] = useState({ aberto: false, boleto: null });
+  const [filtros, setFiltros] = useState(filtrosIniciais);
+  const [selecionados, setSelecionados] = useState(new Set());
   const [pg, setPg] = useState(1);
-  const porPg = 50;
-
-  // === EFFECTS / API ===
-  useEffect(() => {
-    const root = document.documentElement;
-    if (tema === 'system') {
-      const prefereDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.setAttribute('data-theme', prefereDark ? 'dark' : 'light');
-      const listener = (e) => root.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', listener);
-      return () => mq.removeEventListener('change', listener);
-    } else {
-      root.setAttribute('data-theme', tema);
-    }
-    localStorage.setItem('atend-tema', tema);
-  }, [tema]);
-
-  const fetchNotificacoes = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    try {
-      const resp = await apiFetch('/boletos/notificacoes', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resp.ok) setNotificacoes(await resp.json());
-    } catch { /* noop */ }
+  const [cadastro, setCadastro] = useState(null);
+  const [detalhe, setDetalhe] = useState(null);
+  const [pagamento, setPagamento] = useState(null);
+  const [confirmacao, setConfirmacao] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+  const [toast, setToast] = useState({});
+  const mostrarToast = useCallback((mensagem, tipo = 'sucesso') => setToast({ mensagem, tipo, visivel: true }), []);
+  const fecharToast = useCallback(() => setToast(t => ({ ...t, visivel: false })), []);
+  const sair = useCallback(() => {
+    localStorage.removeItem('token'); localStorage.removeItem('usuarioPerfil');
+    setEstaLogado(false); setSenha(''); setBoletos([]); setSelecionados(new Set()); setSidebarAberta(false);
+    setCadastro(null); setDetalhe(null); setPagamento(null); setConfirmacao(null); setPagina('dashboard');
   }, []);
-
-  useEffect(() => {
-    const t = setTimeout(fetchNotificacoes, 0);
-    const interval = setInterval(fetchNotificacoes, 30000);
-    return () => { clearTimeout(t); clearInterval(interval); };
-  }, [fetchNotificacoes]);
-
-  const mostrarToast = useCallback((mensagem, tipo = 'sucesso') => {
-    setToast({ mensagem, tipo, visivel: true });
+  const carregar = useCallback(async () => {
+    if (!localStorage.getItem('token')) return;
+    setCarregando(true); setErroLista('');
+    try { setBoletos(await apiJson('/boletos/')); }
+    catch (e) { setErroLista(e.message); }
+    finally { setCarregando(false); }
   }, []);
-
-  const fecharToast = useCallback(() => {
-    setToast((prev) => ({ ...prev, visivel: false }));
-  }, []);
-
-  const lidarComSair = useCallback(() => {
-    setEstaLogado(false);
-    setSidebarAberta(false);
-    setBoletos([]);
-    setSelecionados(new Set());
-    localStorage.removeItem('token');
-    localStorage.removeItem('usuarioPerfil');
-  }, []);
-
-  const fetchBoletos = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    setCarregandoBoletos(true);
-    try {
-      const resposta = await apiFetch('/boletos/', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resposta.ok) {
-        setBoletos(await resposta.json());
-      } else if (resposta.status === 401) {
-        lidarComSair();
-      }
-    } catch {
-      mostrarToast('Erro ao carregar boletos', 'erro');
-    } finally {
-      setCarregandoBoletos(false);
-    }
-  }, [mostrarToast, lidarComSair]);
-
   useEffect(() => {
     const t = setTimeout(() => {
-      const token = localStorage.getItem('token');
-      const perfilSalvo = localStorage.getItem('usuarioPerfil');
-      if (token && perfilSalvo) {
-        const perfil = JSON.parse(perfilSalvo);
-        setUsuarioPerfil(perfil);
-        setUsuarioAdmin(perfil.admin || false);
-        setEstaLogado(true);
-        fetchBoletos();
-      }
+      try {
+        const salvo = JSON.parse(localStorage.getItem('usuarioPerfil') || 'null');
+        if (salvo && localStorage.getItem('token')) { setPerfil(salvo); setEstaLogado(true); carregar(); }
+      } catch { sair(); }
     }, 0);
-    return () => clearTimeout(t);
-  }, [fetchBoletos]);
+    const expirar = () => { sair(); setErro('Sua sessão expirou. Entre novamente para continuar. Seu rascunho de cadastro foi preservado.'); };
+    window.addEventListener('sessao-expirada', expirar);
+    return () => { clearTimeout(t); window.removeEventListener('sessao-expirada', expirar); };
+  }, [carregar, sair]);
+  useEffect(() => {
+    localStorage.setItem('atend-tema', tema);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const aplicar = () => document.documentElement.setAttribute('data-theme', tema === 'system' ? mq.matches ? 'dark' : 'light' : tema);
+    aplicar(); mq.addEventListener('change', aplicar);
+    return () => mq.removeEventListener('change', aplicar);
+  }, [tema]);
+  useEffect(() => {
+    if (!estaLogado) return;
+    const id = setInterval(() => { if (document.visibilityState === 'visible' && !pagamento && !cadastro) carregar(); }, 60000);
+    return () => clearInterval(id);
+  }, [estaLogado, pagamento, cadastro, carregar]);
 
-  // === HANDLERS ===
-  const lidarComLogin = async (e) => {
-    e.preventDefault();
-    if (carregandoLogin) return;
-    setCarregandoLogin(true);
-    setErro('');
-
-    const dadosFormulario = new URLSearchParams();
-    dadosFormulario.append('username', username);
-    dadosFormulario.append('password', senha);
-
-    try {
-      const resposta = await apiFetch('/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: dadosFormulario,
-      });
-
-      const dados = await resposta.json();
-
-      if (resposta.ok) {
-        const perfil = { nome: dados.usuario.nome, sexo: dados.usuario.sexo, admin: dados.usuario.admin };
-        setUsuarioPerfil(perfil);
-        setUsuarioAdmin(dados.usuario.admin || false);
-        localStorage.setItem('token', dados.access_token);
-        localStorage.setItem('usuarioPerfil', JSON.stringify(perfil));
-        setEstaLogado(true);
-        fetchBoletos();
-      } else {
-        setErro(dados.detail || 'Usuário ou senha incorretos.');
-      }
-    } catch {
-      setErro('Não foi possível conectar ao servidor de banco de dados.');
-    } finally {
-      setCarregandoLogin(false);
-    }
-  };
-
-  const lidarComPagarLote = async () => {
-    if (selecionados.size === 0) return;
-    const token = localStorage.getItem('token');
-    const ids = Array.from(selecionados);
-    try {
-      const resposta = await apiFetch('/boletos/pagar-lote', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ ids }),
-      });
-      if (resposta.ok) {
-        setBoletos((prev) =>
-          prev.map((b) => (ids.includes(b.id) ? { ...b, status: 'Pago' } : b))
-        );
-        setSelecionados(new Set());
-        mostrarToast(`${ids.length} boletos pagos com sucesso!`);
-      }
-    } catch {
-      mostrarToast('Erro ao pagar boletos', 'erro');
-    }
-  };
-
-  const lidarComExcluir = async () => {
-    const boletoId = confirmExcluir.boletoId;
-    if (!boletoId) return;
-    const token = localStorage.getItem('token');
-    try {
-      const resposta = await apiFetch(`/boletos/${boletoId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resposta.ok) {
-        setBoletos((prev) => prev.filter((b) => b.id !== boletoId));
-        setSelecionados((prev) => { const novo = new Set(prev); novo.delete(boletoId); return novo; });
-        setConfirmExcluir({ aberto: false, boletoId: null });
-        mostrarToast('Boleto excluído com sucesso!');
-      }
-    } catch {
-      mostrarToast('Erro ao excluir boleto', 'erro');
-    }
-  };
-
-  const lidarComExportarCSV = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      const resp = await apiFetch('/boletos/exportar-csv', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `boletos_${new Date().toISOString().slice(0, 7)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-        mostrarToast('CSV exportado com sucesso!');
-      }
-    } catch { mostrarToast('Erro ao exportar', 'erro'); }
-  };
-
-  const toggleSelecionado = (id) => {
-    setSelecionados((prev) => {
-      const novo = new Set(prev);
-      if (novo.has(id)) novo.delete(id);
-      else novo.add(id);
-      return novo;
-    });
-  };
-
-  const hoje = new Date().toLocaleDateString('en-CA');
-
-  const fornecedoresDisponiveis = useMemo(() => {
-    const set = new Set();
-    boletos.forEach((b) => {
-      if (b.fornecedor) set.add(b.fornecedor);
-    });
-    return Array.from(set).sort();
-  }, [boletos]);
-
-  const diasDisponiveis = useMemo(() => {
-    const set = new Set();
-    boletos.forEach((b) => {
-      if (b.vencimento && b.vencimento.startsWith(mesSelecionado)) {
-        set.add(parseInt(b.vencimento.split('-')[2], 10));
-      }
-    });
-    return Array.from(set).sort((a, b) => a - b);
-  }, [boletos, mesSelecionado]);
-
-  const boletosFiltrados = useMemo(() => {
-    let lista = dataInicio && dataFim
-      ? boletos.filter((b) => b.vencimento >= dataInicio && b.vencimento <= dataFim)
-      : boletos.filter((b) => b.vencimento.startsWith(mesSelecionado));
-    if (filtroStatus === 'pendentes') lista = lista.filter((b) => b.status !== 'Pago');
-    else if (filtroStatus === 'pagos') lista = lista.filter((b) => b.status === 'Pago');
-    else if (filtroStatus === 'vencendo') lista = lista.filter((b) => b.vencimento === hoje && b.status !== 'Pago');
-    if (filtroDia) {
-      lista = lista.filter((b) => parseInt(b.vencimento.split('-')[2], 10) === parseInt(filtroDia, 10));
-    }
-    if (filtroFornecedor) {
-      lista = lista.filter((b) => b.fornecedor === filtroFornecedor);
-    }
-    return lista.sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
-  }, [boletos, mesSelecionado, dataInicio, dataFim, filtroStatus, filtroDia, filtroFornecedor, hoje]);
-
-  const toggleSelecionarTodos = () => {
-    setSelecionados((prev) => {
-      if (prev.size === boletosFiltrados.length && boletosFiltrados.length > 0) return new Set();
-      return new Set(boletosFiltrados.map((b) => b.id));
-    });
-  };
-
-  const totalPago = useMemo(
-    () => boletos.filter((b) => {
-      if (dataInicio && dataFim) {
-        if (b.vencimento < dataInicio || b.vencimento > dataFim) return false;
-      } else if (!b.vencimento.startsWith(mesSelecionado)) {
-        return false;
-      }
-      if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
-      return b.status === 'Pago';
-    }).reduce((s, b) => s + b.valor, 0),
-    [boletos, mesSelecionado, dataInicio, dataFim, filtroDia]
-  );
-
-  const totalAPagar = useMemo(
-    () => boletos.filter((b) => {
-      if (dataInicio && dataFim) {
-        if (b.vencimento < dataInicio || b.vencimento > dataFim) return false;
-      } else if (!b.vencimento.startsWith(mesSelecionado)) {
-        return false;
-      }
-      if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
-      return b.status !== 'Pago';
-    }).reduce((s, b) => s + b.valor, 0),
-    [boletos, mesSelecionado, dataInicio, dataFim, filtroDia]
-  );
-
-  const vencendoHoje = useMemo(
-    () => boletos.filter((b) => {
-      if (b.vencimento !== hoje) return false;
-      if (filtroDia && parseInt(b.vencimento.split('-')[2], 10) !== parseInt(filtroDia, 10)) return false;
-      return b.status !== 'Pago';
-    }).reduce((s, b) => s + b.valor, 0),
-    [boletos, hoje, filtroDia]
-  );
-
-  const totalExibido = useMemo(
-    () => boletosFiltrados.reduce((s, b) => s + b.valor, 0),
-    [boletosFiltrados]
-  );
-
-  const totalPaginas = Math.max(1, Math.ceil(boletosFiltrados.length / porPg));
-  const boletosPg = boletosFiltrados.slice((pg - 1) * porPg, pg * porPg);
-
-  useEffect(() => { const t = setTimeout(() => { if (pg > totalPaginas) setPg(1); }, 0); return () => clearTimeout(t); }, [pg, totalPaginas]);
-
+  const hoje = dataLocal();
+  const filtrados = useMemo(() => filtrarBoletos(boletos, filtros, hoje), [boletos, filtros, hoje]);
+  const visiveis = new Set(selecionaveis(filtrados).map(b => b.id));
+  const selecionadosAtivos = new Set([...selecionados].filter(id => visiveis.has(id)));
+  const itensSelecionados = filtrados.filter(b => selecionadosAtivos.has(b.id));
+  const atual = Math.min(pg, Math.max(1, Math.ceil(filtrados.length / 25)));
+  const prazos = resumoPrazo(boletos, hoje);
+  const total = lista => lista.reduce((s, b) => s + Number(b.valor), 0);
+  const periodo = filtrarBoletos(boletos, { mes: filtros.mes, status: 'todos' }, hoje);
   const meses = useMemo(() => {
-    const lista = [];
+    const opcoes = new Set([dataLocal().slice(0, 7), filtros.mes, ...boletos.map(b => b.vencimento.slice(0, 7))]);
     const agora = new Date();
-    for (let i = -12; i <= 24; i++) {
-      const data = new Date(agora.getFullYear(), agora.getMonth() + i, 1);
-      const valor = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
-      const rotulo = data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^\w/, (c) => c.toUpperCase());
-      lista.push({ valor, rotulo });
-    }
-    return lista;
-  }, []);
-
-  const formatarMoeda = (valor) =>
-    `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const abrirModalAcao = (boleto) => {
-    setModalAcao({ aberto: true, boleto });
+    for (let i = -12; i <= 24; i++) opcoes.add(dataLocal(new Date(agora.getFullYear(), agora.getMonth() + i, 1)).slice(0, 7));
+    return [...opcoes].sort().map(valor => ({ valor, rotulo: new Date(valor + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) }));
+  }, [boletos, filtros.mes]);
+  const mudarFiltros = mudanca => { setFiltros(f => mudanca.limpar ? { ...filtrosIniciais(), mes: f.mes } : { ...f, ...mudanca }); setPg(1); setSelecionados(new Set()); };
+  const navegar = id => { setPagina(id); setSidebarAberta(false); setSelecionados(new Set()); };
+  const togglePagina = itens => {
+    const ids = selecionaveis(itens).map(b => b.id);
+    const todos = ids.every(id => selecionadosAtivos.has(id));
+    setSelecionados(new Set(todos ? [...selecionadosAtivos].filter(id => !ids.includes(id)) : [...selecionadosAtivos, ...ids]));
   };
-
-  const fecharModalAcao = () => {
-    setModalAcao({ aberto: false, boleto: null });
-  };
-
-  const handleEditar = (boleto) => {
-    fecharModalAcao();
-    setBoletoEditando(boleto);
-    setModalAberto(true);
-  };
-
-  const handlePagar = (boletoId) => {
-    const boleto = boletos.find((b) => b.id === boletoId);
-    if (!boleto) return;
-    fecharModalAcao();
-    setModalPagamento({ aberto: true, boleto });
-  };
-
-  const handlePagarConfirmado = (boletoId, metodoPagamento, banco) => {
-    setBoletos((prev) =>
-      prev.map((b) =>
-        b.id === boletoId ? { ...b, status: 'Pago', metodo_pagamento: metodoPagamento, banco } : b
-      )
-    );
-    setModalPagamento({ aberto: false, boleto: null });
-    mostrarToast('Boleto pago com sucesso!');
-  };
-
-  const handleDesfazerPagamento = async (boletoId) => {
-    const token = localStorage.getItem('token');
+  const login = async e => {
+    e.preventDefault(); if (carregandoLogin) return;
+    setCarregandoLogin(true); setErro('');
     try {
-      const resp = await apiFetch(`/boletos/${boletoId}/desfazer-pagamento`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        setBoletos((prev) =>
-          prev.map((b) =>
-            b.id === boletoId ? { ...b, status: 'Pendente', metodo_pagamento: null, banco: null } : b
-          )
-        );
-        fecharModalAcao();
-        mostrarToast('Pagamento desfeito com sucesso!');
-      }
-    } catch {
-      mostrarToast('Erro ao desfazer pagamento', 'erro');
-    }
+      const dados = await apiJson('/login', { method: 'POST', body: new URLSearchParams({ username, password: senha }), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      const usuario = { ...dados.usuario, username };
+      localStorage.setItem('token', dados.access_token); localStorage.setItem('usuarioPerfil', JSON.stringify(usuario));
+      setPerfil(usuario); setEstaLogado(true); setSenha(''); await carregar();
+    } catch (e) { setErro(e.message); }
+    finally { setCarregandoLogin(false); }
   };
-
-  const handleDeletar = (boletoId) => {
-    fecharModalAcao();
-    setConfirmExcluir({ aberto: true, boletoId });
+  const confirmar = async () => {
+    if (ocupado) return; setOcupado(true); setConfirmacao(c => ({ ...c, erro: '' }));
+    try {
+      await apiJson(`/boletos/${confirmacao.id}${confirmacao.tipo === 'desfazer' ? '/desfazer-pagamento' : ''}`, { method: confirmacao.tipo === 'desfazer' ? 'PATCH' : 'DELETE' });
+      setConfirmacao(null); mostrarToast(confirmacao.tipo === 'desfazer' ? 'Pagamento desfeito.' : 'Conta excluída.'); await carregar();
+    } catch (e) { setConfirmacao(c => c ? { ...c, erro: e.message } : c); }
+    finally { setOcupado(false); }
   };
-
-  // === SUB-COMPONENTS ===
-  const renderTabelaBoletos = () => (
-    <>
-      <div className="px-5 py-4 border-b border-atend-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-bold text-white">Contas a Pagar</h3>
-          <p className="text-xs text-slate-400">Listagem de boletos da Atend-Car</p>
-        </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          <button onClick={lidarComExportarCSV}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98] focus:outline-none border border-slate-700">
-            📥 CSV
-          </button>
-          <button onClick={() => { setBoletoEditando(null); setModalAberto(true); }}
-            className="bg-atend-verde hover:opacity-90 text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all duration-200 active:scale-[0.98] focus:outline-none shadow-lg shadow-atend-verde/10">
-            + Novo Boleto
-          </button>
-        </div>
-      </div>
-
-      <div className="px-5 py-3 border-b border-atend-border flex flex-col sm:flex-row items-center gap-3">
-        <div className="flex gap-1 flex-wrap bg-atend-bg p-1 rounded-xl border border-atend-border/50">
-          {[
-            { chave: 'todos', rotulo: 'Todos', icone: '📋' },
-            { chave: 'pendentes', rotulo: 'Pendentes', icone: '⏳' },
-            { chave: 'pagos', rotulo: 'Pagos', icone: '✅' },
-            { chave: 'vencendo', rotulo: 'Vencendo Hoje', icone: '🔴' },
-          ].map(({ chave, rotulo, icone }) => (
-            <button
-              key={chave}
-              onClick={() => { setFiltroStatus(chave); setSelecionados(new Set()); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 active:scale-[0.98] focus:outline-none ${
-                filtroStatus === chave
-                  ? 'bg-atend-verde/15 text-atend-verde shadow-sm shadow-atend-verde/10'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
-              }`}
-            >
-              <span className="text-[11px]">{icone}</span>
-              {rotulo}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-2 flex-1 sm:justify-end items-center flex-wrap">
-          <div className="relative">
-            <select
-              value={mesSelecionado}
-              onChange={(e) => { setMesSelecionado(e.target.value); setSelecionados(new Set()); }}
-              className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer active:scale-[0.98] bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}
-            >
-              {meses.map(({ valor, rotulo }) => (
-                <option key={valor} value={valor}>{rotulo}</option>
-              ))}
-            </select>
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">📅</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-atend-bg border border-atend-border/50 rounded-lg px-2.5 py-1.5">
-            <span className="text-[11px] text-slate-500">Período</span>
-            <input type="date" value={dataInicio}
-              onChange={(e) => { setDataInicio(e.target.value); setSelecionados(new Set()); }}
-              className="bg-transparent text-xs text-slate-300 focus:outline-none [color-scheme:dark] cursor-pointer" />
-            <span className="text-xs text-slate-500">→</span>
-            <input type="date" value={dataFim}
-              onChange={(e) => { setDataFim(e.target.value); setSelecionados(new Set()); }}
-              className="bg-transparent text-xs text-slate-300 focus:outline-none [color-scheme:dark] cursor-pointer" />
-            {(dataInicio || dataFim) && (
-              <button type="button" onClick={() => { setDataInicio(''); setDataFim(''); setSelecionados(new Set()); }}
-                className="text-slate-500 hover:text-white text-sm leading-none px-0.5 transition-colors" title="Limpar período">
-                ×
-              </button>
-            )}
-          </div>
-
-          {diasDisponiveis.length > 0 && (
-            <div className="relative">
-              <select value={filtroDia} onChange={(e) => setFiltroDia(e.target.value)}
-                className="bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer active:scale-[0.98] bg-[length:14px] bg-[right_8px_center] bg-no-repeat transition-all duration-200"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")` }}>
-                <option value="">Dia</option>
-                {diasDisponiveis.map((d) => (
-                  <option key={d} value={d}>Dia {d}</option>
-                ))}
-              </select>
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">📆</span>
-            </div>
-          )}
-
-          <div className="relative flex-1 min-w-[140px] max-w-[200px]">
-            <select value={filtroFornecedor} onChange={(e) => setFiltroFornecedor(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-atend-verde/60 appearance-none cursor-pointer active:scale-[0.98] transition-all duration-200">
-              <option value="">Todos fornecedores</option>
-              {fornecedoresDisponiveis.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">🔍</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-              <th className="px-5 py-4 w-10">
-                <input
-                  type="checkbox"
-                  checked={boletosFiltrados.length > 0 && selecionados.size === boletosFiltrados.length}
-                  onChange={toggleSelecionarTodos}
-                  className="accent-atend-verde w-4 h-4"
-                />
-              </th>
-              <th className="px-5 py-4">Fornecedor / Descrição</th>
-              <th className="px-5 py-4">Valor</th>
-              <th className="px-5 py-4">Vencimento</th>
-              <th className="px-5 py-4">Status</th>
-              <th className="px-5 py-4">Categoria</th>
-              <th className="px-5 py-4">Método</th>
-              <th className="px-5 py-4">Banco</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
-            {carregandoBoletos ? (
-              Array.from({ length: 6 }).map((_, i) => <SkeletonLinha key={i} colunas={8} />)
-            ) : boletosFiltrados.length === 0 ? (
-              <tr><td colSpan="8" className="px-5 py-12 text-center text-slate-500 bg-slate-900/10">
-                <div className="text-2xl mb-2">📦</div>
-                <p className="text-sm font-medium text-slate-400">Nenhum boleto cadastrado</p>
-                <p className="text-xs text-slate-500 mt-0.5">Neste período ou filtro selecionado</p>
-              </td></tr>
-            ) : (
-              boletosPg.map((boleto) => (
-                <tr key={boleto.id}
-                  onClick={() => abrirModalAcao(boleto)}
-                  className={`cursor-pointer hover:bg-slate-900/20 even:bg-slate-900/10 transition-all duration-150 active:scale-[0.99] ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'bg-rose-500/5 even:bg-rose-500/10' : ''}`}>                  
-                  <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={selecionados.has(boleto.id)}
-                      onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
-                      className="accent-atend-verde w-4 h-4 disabled:opacity-30" />
-                  </td>
-                  <td className="px-5 py-4 font-medium text-white">
-                    {boleto.fornecedor}
-                    {boleto.descricao && <p className="text-xs text-slate-400 font-normal mt-0.5 truncate max-w-[200px]">{boleto.descricao}</p>}
-                  </td>
-                  <td className="px-5 py-4">{formatarMoeda(boleto.valor)}</td>
-                  <td className="px-5 py-4 text-slate-400">
-                    {new Date(boleto.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                    {boleto.vencimento === hoje && boleto.status !== 'Pago' && <span className="ml-2 text-[10px] font-bold text-rose-400 uppercase">Hoje</span>}
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      boleto.status === 'Pago' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
-                    }`}>{boleto.status}</span>
-                  </td>
-                  <td className="px-5 py-4 text-slate-400 text-xs">
-                    {boleto.categoria ? (
-                      <span className="bg-slate-800/50 px-2 py-0.5 rounded text-slate-300">{boleto.categoria}</span>
-                    ) : '-'}
-                  </td>
-                  <td className="px-5 py-4 text-xs text-slate-400">
-                    {boleto.metodo_pagamento ? (
-                      <span className="bg-slate-800/50 px-2 py-0.5 rounded">{boleto.metodo_pagamento}</span>
-                    ) : '-'}
-                  </td>
-                  <td className="px-5 py-4 text-xs text-slate-400">
-                    {boleto.banco ? (
-                      <span className="bg-slate-800/50 px-2 py-0.5 rounded">{boleto.banco}</span>
-                    ) : '-'}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-          {boletosFiltrados.length > 0 && (
-            <tfoot>
-              <tr className="border-t border-atend-border bg-slate-900/40 text-sm font-semibold">
-                <td colSpan="2" className="px-5 py-4 text-slate-400 uppercase tracking-wider text-xs">Total</td>
-                <td className="px-5 py-4 text-white">{formatarMoeda(totalExibido)}</td>
-                <td colSpan="5"></td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </div>
-
-      <div className="md:hidden space-y-2 p-2">
-        {carregandoBoletos ? (
-          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
-        ) : boletosFiltrados.length === 0 ? (
-          <div className="px-5 py-10 text-center text-slate-500">
-            <div className="text-2xl mb-1">📦</div>
-            <p className="text-sm font-medium text-slate-400">Nenhum boleto cadastrado</p>
-          </div>
-        ) : (
-          boletosPg.map((boleto) => (
-            <div key={boleto.id} onClick={() => abrirModalAcao(boleto)}
-              className={`rounded-xl border border-atend-border bg-atend-card px-4 py-4 cursor-pointer transition-all duration-200 active:scale-[0.98] hover:border-atend-verde/30 ${boleto.vencimento === hoje && boleto.status !== 'Pago' ? 'border-rose-500/30' : ''}`}>
-              <div className="flex items-start gap-3">
-                <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" checked={selecionados.has(boleto.id)}
-                    onChange={() => toggleSelecionado(boleto.id)} disabled={boleto.status === 'Pago'}
-                    className="accent-atend-verde w-4 h-4 disabled:opacity-30" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-white truncate">{boleto.fornecedor}</p>
-                  {boleto.descricao && <p className="text-xs text-slate-400 truncate">{boleto.descricao}</p>}
-                  <p className="text-lg font-bold text-white mt-0.5">{formatarMoeda(boleto.valor)}</p>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-xs text-slate-400">
-                      {new Date(boleto.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                      {boleto.vencimento === hoje && boleto.status !== 'Pago' && <span className="ml-1.5 text-[10px] font-bold text-rose-400 uppercase">Hoje</span>}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      boleto.status === 'Pago' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
-                    }`}>{boleto.status}</span>
-                    {boleto.categoria && (
-                      <span className="text-[10px] bg-slate-800/50 px-1.5 py-0.5 rounded text-slate-400">{boleto.categoria}</span>
-                    )}
-                    {boleto.metodo_pagamento && (
-                      <span className="text-[10px] bg-slate-800/50 px-1.5 py-0.5 rounded text-slate-400">{boleto.metodo_pagamento}</span>
-                    )}
-                    {boleto.banco && (
-                      <span className="text-[10px] bg-slate-800/50 px-1.5 py-0.5 rounded text-slate-400">{boleto.banco}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-        {boletosFiltrados.length > 0 && (
-          <div className="rounded-xl border border-atend-border bg-atend-card/80 px-4 py-3">
-            <div className="flex justify-between text-sm font-semibold">
-              <span className="text-slate-400 uppercase tracking-wider text-xs">Total</span>
-              <span className="text-white">{formatarMoeda(totalExibido)}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {totalPaginas > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4 pb-2">
-          <button onClick={() => setPg(pg - 1)} disabled={pg <= 1}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 active:scale-[0.98] focus:outline-none">
-            ‹ Anterior
-          </button>
-          {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((p) => (
-            <button key={p} onClick={() => setPg(p)}
-              className={`w-8 h-8 rounded-lg text-xs font-medium transition-all duration-200 active:scale-[0.98] focus:outline-none ${p === pg ? 'bg-atend-verde text-slate-950' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'}`}>
-              {p}
-            </button>
-          ))}
-          <button onClick={() => setPg(pg + 1)} disabled={pg >= totalPaginas}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 active:scale-[0.98] focus:outline-none">
-            Próximo ›
-          </button>
-        </div>
-      )}
-    </>
-  );
-
-  // === RENDER SUB-COMPONENTS ===
-
-  if (!estaLogado) {
-    return (
-      <Login username={username} setUsername={setUsername} senha={senha} setSenha={setSenha}
-        erro={erro} carregando={carregandoLogin} onSubmit={lidarComLogin} />
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-atend-bg text-slate-100 font-sans flex">
-      <Sidebar
-        aberta={sidebarAberta}
-        setAberta={setSidebarAberta}
-        paginaAtual={paginaAtual}
-        setPaginaAtual={setPaginaAtual}
-        onSair={lidarComSair}
-        tema={tema}
-        onTemaChange={setTema}
-        notificacoes={notificacoes}
-        usuarioAdmin={usuarioAdmin}
-      />
-
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="border-b border-atend-border bg-atend-card/80 backdrop-blur sticky top-0 z-30">
-          <div className="flex items-center justify-between px-4 py-3.5">
-            <button
-              onClick={() => setSidebarAberta((prev) => !prev)}
-              className="text-slate-400 hover:text-white text-xl p-1 active:scale-[0.98] transition-all duration-200"
-              aria-label="Abrir menu"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <h1 className="text-lg tracking-wide uppercase text-white"
-              style={{ fontFamily: "'Sonic Extra Bold', 'Segoe UI', 'Arial Black', system-ui, sans-serif", fontWeight: 900 }}>
-              FINANCEIRO <span className="text-atend-verde">ATEND-CAR</span>
-            </h1>
-            <div className="w-6" />
-          </div>
-        </header>
-
-        <main className="flex-1 px-4 py-6 max-w-7xl w-full mx-auto">
-          {paginaAtual === 'dashboard' && (
-            <>
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6">
-                <div>
-                  <p className="text-sm text-slate-400">
-                    {usuarioPerfil.sexo === 'M' ? 'Bem-vindo de volta,' : 'Bem-vinda de volta,'}
-                  </p>
-                  <h2 className="text-2xl font-bold text-white tracking-tight">{usuarioPerfil.nome}</h2>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-500 uppercase tracking-wider">Hoje</p>
-                  <p className="text-sm font-medium text-atend-verde">
-                    {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/^\w/, (c) => c.toUpperCase())}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div onClick={() => { setFiltroStatus(filtroStatus === 'pagos' ? 'todos' : 'pagos'); setSelecionados(new Set()); }}
-                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                  <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-atend-verde/50 to-transparent ${filtroStatus === 'pagos' ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`}></div>
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pago</span>
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${filtroStatus === 'pagos' ? 'bg-atend-verde/20 text-atend-verde border-atend-verde/40' : 'bg-atend-verde/10 text-atend-verde border-atend-verde/20'}`}>Mês</span>
-                  </div>
-                  <span className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${filtroStatus === 'pagos' ? 'text-atend-verde' : 'text-white group-hover:text-atend-verde group-active:text-atend-verde'} transition-colors`}>{formatarMoeda(totalPago)}</span>
-                </div>
-                <div onClick={() => { setFiltroStatus(filtroStatus === 'pendentes' ? 'todos' : 'pendentes'); setSelecionados(new Set()); }}
-                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                  <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent ${filtroStatus === 'pendentes' ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`}></div>
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total a Pagar</span>
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${filtroStatus === 'pendentes' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>Aberto</span>
-                  </div>
-                  <span className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${filtroStatus === 'pendentes' ? 'text-amber-400' : 'text-white group-hover:text-amber-400 group-active:text-amber-400'} transition-colors`}>{formatarMoeda(totalAPagar)}</span>
-                </div>
-                <div onClick={() => { setFiltroStatus(filtroStatus === 'vencendo' ? 'todos' : 'vencendo'); setSelecionados(new Set()); }}
-                  className="group relative overflow-hidden rounded-xl border border-atend-border bg-atend-card p-5 shadow-2xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                  <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent ${filtroStatus === 'vencendo' ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`}></div>
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vencendo Hoje</span>
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${filtroStatus === 'vencendo' ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>Atenção</span>
-                  </div>
-                  <span className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${filtroStatus === 'vencendo' ? 'text-rose-400' : 'text-white group-hover:text-rose-400 group-active:text-rose-400'} transition-colors`}>{formatarMoeda(vencendoHoje)}</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-                {renderTabelaBoletos()}
-              </div>
-            </>
-          )}
-
-          {paginaAtual === 'boletos' && (
-            <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-              {renderTabelaBoletos()}
-            </div>
-          )}
-
-          {paginaAtual === 'perfil' && <PaginaPerfil usuarioPerfil={usuarioPerfil} />}
-          {paginaAtual === 'fornecedores' && <FornecedoresPage mostrarToast={mostrarToast} />}
-          {paginaAtual === 'relatorios' && <RelatoriosPage mostrarToast={mostrarToast} />}
-          {paginaAtual === 'auditoria' && <AuditoriaPage />}
-          {paginaAtual === 'admin' && usuarioAdmin && <AdminPage mostrarToast={mostrarToast} />}
-          {paginaAtual === 'metas' && <MetasPage mostrarToast={mostrarToast} />}
-        </main>
-      </div>
-
-      {selecionados.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up">
-          <button onClick={lidarComPagarLote}
-            className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold px-6 py-3 rounded-xl shadow-2xl shadow-atend-verde/20 flex items-center gap-2 transition-all duration-200">
-            ✔ Pagar Selecionados ({selecionados.size})
-          </button>
-        </div>
-      )}
-
-      <Toast mensagem={toast.mensagem} tipo={toast.tipo} visivel={toast.visivel} onFechar={fecharToast} />
-      <ModalNovoBoleto aberto={modalAberto} onFechar={() => { setModalAberto(false); setBoletoEditando(null); }} onBoletoCriado={fetchBoletos} boletoEditando={boletoEditando} />
-      <ModalAcaoBoleto
-        aberto={modalAcao.aberto}
-        boleto={modalAcao.boleto}
-        onFechar={fecharModalAcao}
-        onEditar={handleEditar}
-        onPagar={handlePagar}
-        onDeletar={handleDeletar}
-        onDesfazerPagamento={handleDesfazerPagamento}
-      />
-      <ModalPagamento
-        aberto={modalPagamento.aberto}
-        boleto={modalPagamento.boleto}
-        onFechar={() => setModalPagamento({ aberto: false, boleto: null })}
-        onConfirmado={handlePagarConfirmado}
-      />
-      <ConfirmDialog
-        aberto={confirmExcluir.aberto}
-        titulo="Excluir Boleto"
-        mensagem="Tem certeza que deseja excluir este boleto? Esta ação não pode ser desfeita."
-        onConfirmar={lidarComExcluir}
-        onCancelar={() => setConfirmExcluir({ aberto: false, boletoId: null })}
-      />
+  const exportar = async () => {
+    try {
+      const resp = await exigirSucesso(await apiFetch('/boletos/exportar-csv'));
+      const url = URL.createObjectURL(await resp.blob()); const a = document.createElement('a');
+      a.href = url; a.download = `boletos_${hoje}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      mostrarToast('CSV com todas as contas exportado.');
+    } catch (e) { mostrarToast(e.message, 'erro'); }
+  };
+  if (!estaLogado) return <Login username={username} senha={senha} setUsername={setUsername} setSenha={setSenha} erro={erro} carregando={carregandoLogin} onSubmit={login} />;
+  return <div className="app-shell">
+    <Sidebar aberta={sidebarAberta} setAberta={setSidebarAberta} paginaAtual={pagina} setPaginaAtual={navegar} onSair={sair} tema={tema} onTemaChange={setTema} notificacoes={{ atrasados: prazos.vencidos.quantidade }} usuarioAdmin={perfil.admin} />
+    <div className="app-content"><header className="app-header" aria-label={titulos[pagina]}><div className="actions-row"><button type="button" className="icon-button app-menu-toggle" onClick={() => setSidebarAberta(true)} aria-label="Abrir menu"><Icon name="menu" /></button><h1>FINANCEIRO <span>ATEND-CAR</span></h1></div><button type="button" className="button-secondary" onClick={() => navegar('perfil')}><Icon name="usuario" size={16} /><span>{perfil.nome}</span></button></header>
+      <main className="app-main">
+        {pagina === 'dashboard' && <><div className="section-heading dashboard-heading"><div><h2>Olá, {perfil.nome?.split(' ')[0]}</h2><p>Acompanhe as contas que precisam de atenção.</p></div><span className="subtle">{new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}</span></div>
+          <div className="summary-grid">{[{ status: 'vencidos', titulo: 'Vencidos', icone: 'alerta', tom: 'danger' }, { status: 'vencendo', titulo: 'Vencem hoje', icone: 'calendario', tom: 'warning' }, { status: 'proximos', titulo: 'Próximos 7 dias', icone: 'boleto', tom: 'success' }].map(c => <button key={c.status} type="button" className={`summary-card ${c.tom}`} aria-pressed={filtros.status === c.status} onClick={() => mudarFiltros({ status: filtros.status === c.status ? 'todos' : c.status, inicio: '', fim: '', dia: '' })}><div className="summary-label"><span>{c.titulo}</span><Icon name={c.icone} /></div><strong>{carregando ? '…' : moeda(prazos[c.status].valor)}</strong><span>{prazos[c.status].quantidade} contas · Ver contas <Icon name="seta" size={14} /></span></button>)}</div>
+          <div className="period-summary"><span>Resumo do mês selecionado</span><button type="button" className="link-button" onClick={() => mudarFiltros({ status: 'pagos' })}>Pago: {moeda(total(periodo.filter(b => b.status === 'Pago')))}</button><button type="button" className="link-button" onClick={() => mudarFiltros({ status: 'pendentes' })}>Em aberto: {moeda(total(selecionaveis(periodo)))}</button></div></>}
+        {['dashboard', 'boletos'].includes(pagina) && <BoletosList itens={filtrados.slice((atual - 1) * 25, atual * 25)} filtros={filtros} onFiltros={mudarFiltros} meses={meses} fornecedores={[...new Set(boletos.map(b => b.fornecedor))].sort()} selecionados={selecionadosAtivos} onSelecionar={id => { const n = new Set(selecionadosAtivos); if (n.has(id)) n.delete(id); else n.add(id); setSelecionados(n); }} onSelecionarPagina={togglePagina} onAbrir={setDetalhe} onNovo={() => setCadastro({})} onCSV={exportar} carregando={carregando} erro={erroLista} onTentar={carregar} pg={atual} onPagina={setPg} totalItens={filtrados.length} totalValor={total(filtrados)} hoje={hoje} />}
+        <Suspense fallback={<div className="empty-state" role="status">Carregando página...</div>}>
+          {pagina === 'perfil' && <PaginaPerfil usuarioPerfil={perfil} />}
+          {pagina === 'fornecedores' && <FornecedoresPage mostrarToast={mostrarToast} />}
+          {pagina === 'relatorios' && <RelatoriosPage mostrarToast={mostrarToast} />}
+          {pagina === 'auditoria' && <AuditoriaPage />}
+          {pagina === 'admin' && perfil.admin && <AdminPage mostrarToast={mostrarToast} />}
+          {pagina === 'metas' && <MetasPage mostrarToast={mostrarToast} />}
+        </Suspense>
+      </main>
     </div>
-  );
+    {selecionadosAtivos.size > 0 && !carregando && !erroLista && ['dashboard', 'boletos'].includes(pagina) && <div className="batch-bar"><span>{selecionadosAtivos.size} selecionadas · <strong>{moeda(total(itensSelecionados))}</strong></span><button type="button" className="button-secondary" onClick={() => setSelecionados(new Set())}>Limpar seleção</button><button type="button" className="button-primary" onClick={() => setPagamento(itensSelecionados)}>Registrar pagamentos</button></div>}
+    <Toast {...toast} onFechar={fecharToast} />
+    {cadastro && <ModalNovoBoleto aberto podeRecorrencia={!!perfil.admin} onFechar={() => setCadastro(null)} onBoletoCriado={() => { carregar(); mostrarToast('Conta salva.'); }} boletoEditando={cadastro.id ? cadastro : null} />}
+    <ModalAcaoBoleto aberto={!!detalhe} boleto={detalhe} onFechar={() => setDetalhe(null)} onEditar={b => { setDetalhe(null); setCadastro(b); }} onPagar={id => { setDetalhe(null); setPagamento([boletos.find(b => b.id === id)]); }} onDeletar={id => { setDetalhe(null); setConfirmacao({ tipo: 'excluir', id }); }} onDesfazerPagamento={id => { setDetalhe(null); setConfirmacao({ tipo: 'desfazer', id }); }} />
+    {pagamento && <ModalPagamento aberto boletos={pagamento} onFechar={() => setPagamento(null)} onConfirmado={() => { setPagamento(null); setSelecionados(new Set()); carregar(); mostrarToast('Pagamento registrado.'); }} />}
+    <ConfirmDialog erro={confirmacao?.erro} aberto={!!confirmacao} titulo={confirmacao?.tipo === 'desfazer' ? 'Desfazer pagamento?' : 'Excluir conta?'} mensagem={confirmacao?.tipo === 'desfazer' ? 'A conta voltará a ficar pendente. O registro do pagamento será removido.' : 'A conta sairá da lista. Um administrador pode restaurá-la na lixeira.'} onConfirmar={confirmar} onCancelar={() => setConfirmacao(null)} carregando={ocupado} />
+  </div>;
 }
-
-export default App;

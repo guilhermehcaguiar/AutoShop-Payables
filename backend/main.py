@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, field_validator
 from passlib.context import CryptContext
 from database import get_connection, Base, engine, migrar, Config
 from jose import JWTError, ExpiredSignatureError, jwt
@@ -10,7 +10,7 @@ import os
 import csv
 import io
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from calendar import monthrange
@@ -109,12 +109,20 @@ class BoletoCreateBackup(BaseModel):
     banco: str | None = None
     status: str | None = "Pendente"
 
-class BoletoPagarLote(BaseModel):
-    ids: list[int]
-
 class PagarBoleto(BaseModel):
     metodo_pagamento: str | None = None
     banco: str | None = None
+    data_pagamento: date | None = None
+
+    @field_validator('data_pagamento')
+    @classmethod
+    def pagamento_nao_futuro(cls, v):
+        if v and v > agora_br().date():
+            raise ValueError('A data de pagamento não pode estar no futuro')
+        return v
+
+class BoletoPagarLote(PagarBoleto):
+    ids: list[int]
 
 class BackupPayload(BaseModel):
     boletos: list[BoletoCreateBackup] | None = []
@@ -438,10 +446,11 @@ def criar_boleto(boleto: BoletoCreate, background_tasks: BackgroundTasks, usuari
     conexao = get_connection()
     cursor = conexao.cursor()
     try:
-        cursor.execute("SELECT id FROM boletos WHERE codigo_barras = %s AND deletado_em IS NULL", (boleto.codigo_barras,))
-        if cursor.fetchone():
-            conexao.close()
-            raise HTTPException(status_code=400, detail="Já existe um boleto cadastrado com este código de barras")
+        if boleto.codigo_barras:
+            cursor.execute("SELECT id FROM boletos WHERE codigo_barras = %s AND deletado_em IS NULL", (boleto.codigo_barras,))
+            if cursor.fetchone():
+                conexao.close()
+                raise HTTPException(status_code=400, detail="Já existe um boleto cadastrado com este código de barras")
 
         cursor.execute("""
             INSERT INTO boletos (fornecedor, valor, vencimento, codigo_barras, status, categoria, usuario_id, descricao, metodo_pagamento, banco)
@@ -504,40 +513,39 @@ def editar_boleto(boleto_id: int, dados: BoletoUpdate, usuario: dict = Depends(g
     registrar_auditoria("editar", "boleto", boleto_id, usuario["id"], f"Campos alterados: {', '.join(campos)}")
     return {"mensagem": "Boleto atualizado com sucesso!"}
 
+def registrar_pagamentos(ids: list[int], dados: PagarBoleto, usuario: dict):
+    ids = sorted(set(ids))
+    if not ids or any(bid <= 0 for bid in ids):
+        raise HTTPException(status_code=400, detail="Selecione pelo menos um boleto v?lido")
+    conexao = get_connection()
+    try:
+        cursor = conexao.cursor()
+        placeholders = ",".join(["%s"] * len(ids))
+        cursor.execute(f"SELECT id, status FROM boletos WHERE id IN ({placeholders}) AND deletado_em IS NULL ORDER BY id FOR UPDATE", tuple(ids))
+        encontrados = cursor.fetchall()
+        if len(encontrados) != len(ids):
+            raise HTTPException(status_code=404, detail="Uma conta n?o est? mais dispon?vel. Atualize a lista antes de confirmar.")
+        if any(linha[1] == 'Pago' for linha in encontrados):
+            raise HTTPException(status_code=409, detail="Uma conta j? foi paga. Atualize a lista antes de confirmar.")
+        data = datetime.combine(dados.data_pagamento, datetime.min.time()) if dados.data_pagamento else agora_br().replace(tzinfo=None)
+        cursor.execute(f"UPDATE boletos SET status = 'Pago', metodo_pagamento = COALESCE(%s, metodo_pagamento), banco = COALESCE(%s, banco), data_pagamento = %s, pago_por = %s WHERE id IN ({placeholders})", (dados.metodo_pagamento, dados.banco, data, usuario['id'], *ids))
+        conexao.commit()
+    except Exception:
+        conexao.rollback()
+        raise
+    finally:
+        conexao.close()
+    for bid in ids:
+        registrar_auditoria("pagar", "boleto", bid, usuario["id"], f"Pagamento registrado em {data.date().isoformat()}")
+    return {"mensagem": f"{len(ids)} pagamento(s) registrado(s)", "ids": ids, "quantidade": len(ids)}
+
 @app.patch("/boletos/{boleto_id}/pagar")
 def pagar_boleto(boleto_id: int, dados: PagarBoleto = None, usuario: dict = Depends(get_usuario_logado)):
-    conexao = get_connection()
-    cursor = conexao.cursor()
-    cursor.execute("SELECT id FROM boletos WHERE id = %s AND deletado_em IS NULL", (boleto_id,))
-    if not cursor.fetchone():
-        conexao.close()
-        raise HTTPException(status_code=404, detail="Boleto não encontrado")
-    if dados is not None:
-        cursor.execute("UPDATE boletos SET status = 'Pago', metodo_pagamento = %s, banco = %s, data_pagamento = NOW(), pago_por = %s WHERE id = %s",
-            (dados.metodo_pagamento, dados.banco, usuario["id"], boleto_id))
-    else:
-        cursor.execute("UPDATE boletos SET status = 'Pago', data_pagamento = NOW(), pago_por = %s WHERE id = %s",
-            (usuario["id"], boleto_id))
-    conexao.commit()
-    conexao.close()
-    registrar_auditoria("pagar", "boleto", boleto_id, usuario["id"], "Boleto pago")
-    return {"mensagem": "Boleto marcado como pago!"}
+    return registrar_pagamentos([boleto_id], dados or PagarBoleto(), usuario)
 
 @app.post("/boletos/pagar-lote")
 def pagar_boletos_lote(dados: BoletoPagarLote, usuario: dict = Depends(get_usuario_logado)):
-    conexao = get_connection()
-    cursor = conexao.cursor()
-    if not dados.ids:
-        raise HTTPException(status_code=400, detail="Nenhum boleto selecionado")
-    placeholders = ",".join(["%s"] * len(dados.ids))
-    cursor.execute("UPDATE boletos SET status = 'Pago', data_pagamento = NOW(), pago_por = %s WHERE id IN ({}) AND deletado_em IS NULL".format(placeholders),
-        (usuario["id"], *tuple(dados.ids)))
-    conexao.commit()
-    linhas_afetadas = cursor.rowcount
-    conexao.close()
-    for bid in dados.ids:
-        registrar_auditoria("pagar", "boleto", bid, usuario["id"], "Pago em lote")
-    return {"mensagem": f"{linhas_afetadas} boletos marcados como pagos!"}
+    return registrar_pagamentos(dados.ids, dados, usuario)
 
 @app.delete("/boletos/{boleto_id}")
 def excluir_boleto(boleto_id: int, usuario: dict = Depends(get_usuario_logado)):

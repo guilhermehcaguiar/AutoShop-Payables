@@ -32,6 +32,7 @@ const paginaTeste = async (server, _req, res) => {
     import ReactDOM from 'react-dom/client';
     import Scanner from '/src/components/ScannerBoleto.jsx';
     import '/src/index.css';
+    import '/src/app-ui.css';
     const root = ReactDOM.createRoot(document.getElementById('root'));
     window.resultados = [];
     window.abrir = (aberto) => root.render(React.createElement(React.StrictMode, null, React.createElement(Scanner, {

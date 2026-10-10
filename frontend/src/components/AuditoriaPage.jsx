@@ -1,88 +1,24 @@
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../api.js';
-import { SkeletonTabela } from './Skeleton';
+import { useState, useEffect, useCallback } from 'react';
+import { apiJson } from '../api.js';
+import Icon from './Icon.jsx';
+import { formatarDataHora } from '../boletosView.js';
 
-function AuditoriaPage() {
-  const [registros, setRegistros] = useState([]);
+export default function AuditoriaPage() {
+  const [lista, setLista] = useState([]);
   const [carregando, setCarregando] = useState(true);
-
-  useEffect(() => {
-    const fetchAuditoria = async () => {
-      const token = localStorage.getItem('token');
-      try {
-        const resp = await apiFetch('/auditoria/', {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (resp.ok) setRegistros(await resp.json());
-      } catch { /* noop */ } finally { setCarregando(false); }
-    };
-    fetchAuditoria();
+  const [erro, setErro] = useState('');
+  const [busca, setBusca] = useState('');
+  const [acao, setAcao] = useState('');
+  const carregar = useCallback(async () => {
+    setCarregando(true); setErro('');
+    try { setLista(await apiJson('/auditoria/')); } catch (e) { setErro(e.message); }
+    finally { setCarregando(false); }
   }, []);
-
-  const icone = (acao) => {
-    const mapa = { criar: '➕', editar: '✏️', pagar: '✅', excluir: '🗑' };
-    return mapa[acao] || '📌';
-  };
-
-  const corAcao = (acao) => {
-    const mapa = { criar: 'text-atend-verde', editar: 'text-amber-400', pagar: 'text-emerald-400', excluir: 'text-rose-400' };
-    return mapa[acao] || 'text-slate-400';
-  };
-
-  if (carregando) return (
-    <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-      <div className="px-5 py-4 border-b border-atend-border">
-        <div className="h-5 bg-slate-700/50 rounded w-36 animate-pulse" />
-        <div className="h-3 bg-slate-700/50 rounded w-52 mt-1 animate-pulse" />
-      </div>
-      <SkeletonTabela linhas={6} colunas={5} />
-    </div>
-  );
-
-  return (
-    <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-      <div className="px-5 py-4 border-b border-atend-border">
-        <h3 className="text-lg font-bold text-white">Histórico de Ações</h3>
-        <p className="text-xs text-slate-400">Registro de auditoria do sistema</p>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-              <th className="px-5 py-4">Data/Hora</th>
-              <th className="px-5 py-4">Ação</th>
-              <th className="px-5 py-4">Entidade</th>
-              <th className="px-5 py-4">Usuário</th>
-              <th className="px-5 py-4">Detalhes</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
-            {registros.length === 0 ? (
-              <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-500 italic">Nenhum registro de auditoria.</td></tr>
-            ) : registros.map((r) => (
-              <tr key={r.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
-                <td className="px-5 py-4 text-slate-400 text-xs whitespace-nowrap">
-                  {new Date(r.criado_em + 'Z').toLocaleString('pt-BR')}
-                </td>
-                <td className="px-5 py-4">
-                  <span className={`inline-flex items-center gap-1 font-semibold text-xs uppercase ${corAcao(r.acao)}`}>
-                    {icone(r.acao)} {r.acao}
-                  </span>
-                </td>
-                <td className="px-5 py-4">
-                  <span className="text-xs font-medium text-white capitalize">{r.entidade}</span>
-                  {r.entidade_id && <span className="text-xs text-slate-500 ml-1">#{r.entidade_id}</span>}
-                </td>
-                <td className="px-5 py-4 text-xs text-slate-400">{r.usuario_nome || 'Sistema'}</td>
-                <td className="px-5 py-4 text-xs text-slate-400 max-w-[300px] truncate">{r.detalhes}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  useEffect(() => { const t = setTimeout(carregar, 0); return () => clearTimeout(t); }, [carregar]);
+  const encontrados = lista.filter(r => (!acao || r.acao === acao) && [r.detalhes, r.usuario_nome, r.entidade, r.entidade_id].join(' ').toLowerCase().includes(busca.trim().toLowerCase()));
+  const icone = r => <span className="status-pill"><Icon name={{ criar: 'mais', editar: 'editar', pagar: 'check', excluir: 'excluir' }[r.acao] || 'historico'} size={14} />{r.acao}</span>;
+  const detalhes = r => r.detalhes ? <details><summary>Ver detalhes</summary><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', paddingTop: 10 }}>{r.detalhes}</p></details> : '—';
+  return <section className="app-section"><div className="section-heading"><div><h2>Histórico de ações</h2><p>Acompanhe alterações e responsáveis pelos registros.</p></div><button type="button" className="button-secondary" disabled={carregando} onClick={carregar}><Icon name="recorrente" size={16} />Atualizar</button></div><div className="filters"><div className="filter-row"><div className="search-field"><Icon name="busca" size={18} /><input type="search" aria-label="Buscar no histórico" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar usuário, conta ou detalhe" /></div><div className="field"><label htmlFor="historico-acao">Ação</label><select id="historico-acao" value={acao} onChange={e => setAcao(e.target.value)}><option value="">Todas</option>{[...new Set(lista.map(r => r.acao))].sort().map(a => <option key={a}>{a}</option>)}</select></div></div></div>
+    {erro ? <div className="empty-state" role="alert"><p>{erro}</p><button type="button" className="button-secondary" onClick={carregar}>Tentar novamente</button></div> : carregando ? <div className="empty-state" role="status">Carregando histórico...</div> : !encontrados.length ? <div className="empty-state"><h3>{acao || busca ? 'Nenhuma ação encontrada' : 'Nenhuma ação registrada'}</h3>{(acao || busca) && <button type="button" className="button-secondary" onClick={() => { setAcao(''); setBusca(''); }}>Limpar filtros</button>}</div> : <><div className="desktop-table" style={{ overflowX: 'auto' }}><table className="list-table"><thead><tr><th>Data</th><th>Ação</th><th>Registro</th><th>Usuário</th><th>Detalhes</th></tr></thead><tbody>{encontrados.map(r => <tr key={r.id}><td>{formatarDataHora(r.criado_em)}</td><td>{icone(r)}</td><td>{r.entidade} #{r.entidade_id}</td><td>{r.usuario_nome || 'Sistema'}</td><td>{detalhes(r)}</td></tr>)}</tbody></table></div><div className="mobile-cards">{encontrados.map(r => <article className="boleto-card" key={r.id}><div className="actions-row">{icone(r)}<span className="subtle">{formatarDataHora(r.criado_em)}</span></div><p className="subtle">{r.entidade} #{r.entidade_id} · {r.usuario_nome || 'Sistema'}</p>{detalhes(r)}</article>)}</div></>}
+  </section>;
 }
-
-export default AuditoriaPage;

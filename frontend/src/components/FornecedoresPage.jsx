@@ -1,186 +1,54 @@
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../api.js';
-import ConfirmDialog from './ConfirmDialog';
-import { SkeletonTabela } from './Skeleton';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { apiJson } from '../api.js';
+import Dialog from './Dialog.jsx';
+import ConfirmDialog from './ConfirmDialog.jsx';
+import Icon from './Icon.jsx';
+const vazio = { nome: '', cnpj: '', telefone: '', email: '' };
 
-function FornecedoresPage({ mostrarToast }) {
-  const [fornecedores, setFornecedores] = useState([]);
+export default function FornecedoresPage({ mostrarToast }) {
+  const [lista, setLista] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [modalAberto, setModalAberto] = useState(false);
+  const [erroLista, setErroLista] = useState('');
+  const [busca, setBusca] = useState('');
   const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState({ nome: '', cnpj: '', telefone: '', email: '' });
+  const [form, setForm] = useState(vazio);
   const [erro, setErro] = useState('');
-  const [confirmExcluir, setConfirmExcluir] = useState({ aberto: false, id: null });
-
-  const fetchFornecedores = async () => {
-    const token = localStorage.getItem('token');
+  const [excluirId, setExcluirId] = useState(null);
+  const [erroExcluir, setErroExcluir] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const lock = useRef(false);
+  const dialog = useRef(null);
+  const carregar = useCallback(async () => {
+    setCarregando(true); setErroLista('');
+    try { setLista(await apiJson('/fornecedores/')); } catch (e) { setErroLista(e.message); }
+    finally { setCarregando(false); }
+  }, []);
+  useEffect(() => { const t = setTimeout(carregar, 0); return () => clearTimeout(t); }, [carregar]);
+  const abrir = fornecedor => { setEditando(fornecedor || {}); setForm(fornecedor ? Object.fromEntries(Object.keys(vazio).map(k => [k, fornecedor[k] || ''])) : vazio); setErro(''); };
+  const salvar = async e => {
+    e.preventDefault(); if (lock.current) return;
+    if (!form.nome.trim()) { setErro('Informe o nome do fornecedor.'); return; }
+    const digitos = form.cnpj.replace(/\D/g, '');
+    if (form.cnpj && digitos.length !== 14) { setErro('O CNPJ deve ter 14 dígitos.'); return; }
+    lock.current = true; setOcupado(true); setErro('');
     try {
-      const resp = await apiFetch('/fornecedores/', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resp.ok) setFornecedores(await resp.json());
-    } catch { /* noop */ } finally { setCarregando(false); }
+      await apiJson(editando.id ? `/fornecedores/${editando.id}` : '/fornecedores/', { method: editando.id ? 'PUT' : 'POST', body: JSON.stringify({ ...form, nome: form.nome.trim() }) });
+      setEditando(null); mostrarToast('Fornecedor salvo.'); await carregar();
+    } catch (e) { setErro(e.message); }
+    finally { lock.current = false; setOcupado(false); }
   };
-
-  useEffect(() => { const t = setTimeout(fetchFornecedores, 0); return () => clearTimeout(t); }, []);
-
-  const abrirModal = (fornecedor = null) => {
-    if (fornecedor) {
-      setEditando(fornecedor);
-      setForm({ nome: fornecedor.nome, cnpj: fornecedor.cnpj || '', telefone: fornecedor.telefone || '', email: fornecedor.email || '' });
-    } else {
-      setEditando(null);
-      setForm({ nome: '', cnpj: '', telefone: '', email: '' });
-    }
-    setErro('');
-    setModalAberto(true);
-  };
-
-  const salvar = async (e) => {
-    e.preventDefault();
-    setErro('');
-    const token = localStorage.getItem('token');
-    const url = editando
-      ? `/fornecedores/${editando.id}`
-      : '/fornecedores/';
-    const method = editando ? 'PUT' : 'POST';
-    try {
-      const resp = await apiFetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(form),
-      });
-      if (resp.ok) {
-        setModalAberto(false);
-        fetchFornecedores();
-        mostrarToast(editando ? 'Fornecedor atualizado!' : 'Fornecedor cadastrado!');
-      } else {
-        const d = await resp.json();
-        setErro(d.detail || 'Erro ao salvar');
-      }
-    } catch { setErro('Erro de conexão'); }
-  };
-
   const excluir = async () => {
-    const id = confirmExcluir.id;
-    if (!id) return;
-    const token = localStorage.getItem('token');
-    try {
-      const resp = await apiFetch(`/fornecedores/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (resp.ok) { fetchFornecedores(); mostrarToast('Fornecedor excluído!'); }
-    } catch { mostrarToast('Erro ao excluir', 'erro'); }
-    finally { setConfirmExcluir({ aberto: false, id: null }); }
+    if (lock.current) return; lock.current = true; setOcupado(true); setErroExcluir('');
+    try { await apiJson(`/fornecedores/${excluirId}`, { method: 'DELETE' }); setExcluirId(null); mostrarToast('Fornecedor excluído.'); await carregar(); }
+    catch (e) { setErroExcluir(e.message); }
+    finally { lock.current = false; setOcupado(false); }
   };
-
-  if (carregando) return (
-    <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-      <div className="px-5 py-4 border-b border-atend-border">
-        <div className="h-5 bg-slate-700/50 rounded w-32 animate-pulse" />
-        <div className="h-3 bg-slate-700/50 rounded w-48 mt-1 animate-pulse" />
-      </div>
-      <SkeletonTabela linhas={5} colunas={5} />
-    </div>
-  );
-
-  return (
-    <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-      <div className="px-5 py-4 border-b border-atend-border flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold text-white">Fornecedores</h3>
-          <p className="text-xs text-slate-400">Cadastro de fornecedores da oficina</p>
-        </div>
-        <button onClick={() => abrirModal()}
-          className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10">
-          + Novo
-        </button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-atend-border bg-slate-900/30 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-              <th className="px-5 py-4">Nome</th>
-              <th className="px-5 py-4">CNPJ</th>
-              <th className="px-5 py-4">Telefone</th>
-              <th className="px-5 py-4">Email</th>
-              <th className="px-5 py-4 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-atend-border/50 text-sm text-slate-300">
-            {fornecedores.length === 0 ? (
-              <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-500 italic">Nenhum fornecedor cadastrado.</td></tr>
-            ) : fornecedores.map((f) => (
-              <tr key={f.id} className="hover:bg-slate-900/20 transition-all duration-150 active:scale-[0.99]">
-                <td className="px-5 py-4 font-medium text-white">{f.nome}</td>
-                <td className="px-5 py-4 text-slate-400">{f.cnpj || '-'}</td>
-                <td className="px-5 py-4 text-slate-400">{f.telefone || '-'}</td>
-                <td className="px-5 py-4 text-slate-400">{f.email || '-'}</td>
-                <td className="px-5 py-4 text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button onClick={() => abrirModal(f)}
-                      className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-atend-verde/10">✏️</button>
-                    <button onClick={() => setConfirmExcluir({ aberto: true, id: f.id })}
-                      className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-rose-500/10">🗑</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <ConfirmDialog
-        aberto={confirmExcluir.aberto}
-        titulo="Excluir Fornecedor"
-        mensagem="Tem certeza que deseja excluir este fornecedor?"
-        onConfirmar={excluir}
-        onCancelar={() => setConfirmExcluir({ aberto: false, id: null })}
-      />
-
-      {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="fixed inset-0 bg-black/60" onClick={() => setModalAberto(false)} />
-          <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 animate-fade-in-scale">
-            <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
-            <div className="flex justify-between items-center mb-6 mt-1">
-              <h2 className="text-lg font-bold text-white">{editando ? 'Editar' : 'Novo'} Fornecedor</h2>
-              <button onClick={() => setModalAberto(false)} className="text-slate-500 hover:text-white text-xl active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
-            </div>
-            <form onSubmit={salvar} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Nome *</label>
-                <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                  className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" required />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">CNPJ</label>
-                <input type="text" value={form.cnpj} onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                  className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Telefone</label>
-                <input type="text" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })}
-                  className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60" />
-              </div>
-              {erro && <div className="bg-rose-500/10 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erro}</div>}
-              <button type="submit"
-                className="w-full bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all duration-200">
-                {editando ? 'Atualizar' : 'Salvar'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  const encontrados = lista.filter(f => [f.nome, f.cnpj, f.telefone, f.email].join(' ').toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR').trim()));
+  const acoes = f => <div className="actions-row"><button type="button" className="icon-button" aria-label={`Editar ${f.nome}`} onClick={() => abrir(f)}><Icon name="editar" size={17} /></button><button type="button" className="icon-button" aria-label={`Excluir ${f.nome}`} onClick={() => { setErroExcluir(''); setExcluirId(f.id); }}><Icon name="excluir" size={17} /></button></div>;
+  const inicial = editando?.id ? Object.fromEntries(Object.keys(vazio).map(k => [k, editando[k] || ''])) : vazio;
+  return <section className="app-section"><div className="section-heading"><div><h2>Fornecedores</h2><p>Contatos para facilitar o acompanhamento das contas.</p></div><button type="button" className="button-primary" onClick={() => abrir()}><Icon name="mais" size={16} />Novo fornecedor</button></div><div className="filters"><div className="search-field"><Icon name="busca" size={18} /><input type="search" aria-label="Buscar fornecedores" placeholder="Buscar nome, CNPJ ou contato" value={busca} onChange={e => setBusca(e.target.value)} /></div></div>
+    {erroLista ? <div className="empty-state" role="alert"><p>{erroLista}</p><button type="button" className="button-secondary" onClick={carregar}>Tentar novamente</button></div> : carregando ? <div className="empty-state" role="status">Carregando fornecedores...</div> : !encontrados.length ? <div className="empty-state"><h3>{busca ? 'Nenhum fornecedor encontrado' : 'Nenhum fornecedor cadastrado'}</h3><p>{busca ? 'Tente outro nome ou limpe a busca.' : 'Cadastre os contatos dos fornecedores da oficina.'}</p><button type="button" className="button-secondary" onClick={busca ? () => setBusca('') : () => abrir()}>{busca ? 'Limpar busca' : 'Cadastrar fornecedor'}</button></div> : <><div className="desktop-table" style={{ overflowX: 'auto' }}><table className="list-table"><thead><tr><th>Nome</th><th>CNPJ</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{encontrados.map(f => <tr key={f.id}><td>{f.nome}</td><td>{f.cnpj || '—'}</td><td>{f.telefone || '—'}</td><td>{f.email || '—'}</td><td>{acoes(f)}</td></tr>)}</tbody></table></div><div className="mobile-cards">{encontrados.map(f => <article className="boleto-card" key={f.id}><strong>{f.nome}</strong><p className="subtle">{f.cnpj || 'Sem CNPJ'}<br />{f.telefone || 'Sem telefone'}<br />{f.email || 'Sem e-mail'}</p>{acoes(f)}</article>)}</div></>}
+    <Dialog ref={dialog} aberto={!!editando} titulo={editando?.id ? 'Editar fornecedor' : 'Novo fornecedor'} onFechar={() => setEditando(null)} ocupado={ocupado} alterado={JSON.stringify(form) !== JSON.stringify(inicial)}><form onSubmit={salvar}><fieldset disabled={ocupado} style={{ border: 0, padding: 0, margin: 0 }}>{[{ campo: 'nome', titulo: 'Nome *', tipo: 'text' }, { campo: 'cnpj', titulo: 'CNPJ', tipo: 'text' }, { campo: 'telefone', titulo: 'Telefone', tipo: 'tel' }, { campo: 'email', titulo: 'E-mail', tipo: 'email' }].map(c => <div className="field" key={c.campo}><label htmlFor={`fornecedor-${c.campo}`}>{c.titulo}</label><input id={`fornecedor-${c.campo}`} type={c.tipo} required={c.campo === 'nome'} value={form[c.campo]} onChange={e => setForm(f => ({ ...f, [c.campo]: e.target.value }))} /></div>)}</fieldset>{erro && <p className="notice notice-error" role="alert">{erro}</p>}<div className="dialog-actions"><button type="button" className="button-secondary" disabled={ocupado} onClick={() => dialog.current?.solicitarFechamento()}>Cancelar</button><button type="submit" className="button-primary" disabled={ocupado}>{ocupado ? 'Salvando...' : 'Salvar'}</button></div></form></Dialog>
+    <ConfirmDialog erro={erroExcluir} aberto={!!excluirId} titulo="Excluir fornecedor?" mensagem="O contato será removido. Os boletos existentes serão mantidos." onConfirmar={excluir} onCancelar={() => setExcluirId(null)} carregando={ocupado} />
+  </section>;
 }
-
-export default FornecedoresPage;

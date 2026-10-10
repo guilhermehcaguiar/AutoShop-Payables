@@ -1,36 +1,17 @@
-import { useState, useEffect } from 'react';
+import Icon from './Icon.jsx';
+import AccordionSection from './AccordionSection.jsx';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../api.js';
 import ConfirmDialog from './ConfirmDialog';
 
-function AccordionSection({ indice, icone, titulo, descricao, children, aberto, onToggle }) {
-  return (
-    <div className="border-b border-atend-border last:border-b-0">
-      <button onClick={() => onToggle(indice)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-900/20 transition-all duration-200 active:scale-[0.98] focus:outline-none">
-        <div className="flex items-center gap-3">
-          <span className="text-lg">{icone}</span>
-          <div className="text-left">
-            <h3 className="text-sm font-bold text-white">{titulo}</h3>
-            <p className="text-xs text-slate-400">{descricao}</p>
-          </div>
-        </div>
-        <span className={`text-slate-500 transition-all duration-300 ease-in-out ${aberto ? 'rotate-180 text-atend-verde' : ''}`}>▼</span>
-      </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${aberto ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-        <div className="px-5 pb-4">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
+
+const getCatName = (c) => typeof c === 'string' ? c : (c.categoria || c.nome || '');
 
 function AdminPage({ mostrarToast }) {
   const [moduloAberto, setModuloAberto] = useState(null);
   const token = localStorage.getItem('token');
-  const headers = { 'Authorization': `Bearer ${token}` };
+  const headers = useMemo(() => ({ 'Authorization': `Bearer ${token}` }), [token]);
 
-  const getCatName = (c) => typeof c === 'string' ? c : (c.categoria || c.nome || '');
 
   // === MÓDULO 1: GERENCIAR USUÁRIOS ===
   const [usuarios, setUsuarios] = useState([]);
@@ -42,14 +23,14 @@ function AdminPage({ mostrarToast }) {
   const [erroCriar, setErroCriar] = useState('');
   const [carregandoCriar, setCarregandoCriar] = useState(false);
 
-  const fetchUsuarios = async () => {
+  const fetchUsuarios = useCallback(async () => {
     try {
       const resp = await apiFetch('/admin/usuarios/', { headers });
       if (resp.ok) setUsuarios(await resp.json());
     } catch { /* noop */ }
-  };
+  }, [headers]);
 
-  useEffect(() => { const t = setTimeout(fetchUsuarios, 0); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(fetchUsuarios, 0); return () => clearTimeout(t); }, [fetchUsuarios]);
 
   const toggleAdmin = async (usuario) => {
     try {
@@ -113,7 +94,7 @@ function AdminPage({ mostrarToast }) {
   const [editandoCategoria, setEditandoCategoria] = useState(null);
   const [novoNomeCategoria, setNovoNomeCategoria] = useState('');
 
-  const fetchCategorias = async () => {
+  const fetchCategorias = useCallback(async () => {
     try {
       const resp = await apiFetch('/boletos/categorias-utilizadas', { headers });
       if (resp.ok) {
@@ -121,9 +102,9 @@ function AdminPage({ mostrarToast }) {
         setCategorias(Array.isArray(data) ? data : []);
       }
     } catch { /* noop */ }
-  };
+  }, [headers]);
 
-  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 2) fetchCategorias(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 2) fetchCategorias(); }, 0); return () => clearTimeout(t); }, [moduloAberto, fetchCategorias]);
 
   const mesclarCategoria = async (nomeAntigo) => {
     if (!novoNomeCategoria.trim()) {
@@ -152,7 +133,7 @@ function AdminPage({ mostrarToast }) {
   const [categoriasMeta, setCategoriasMeta] = useState([]);
   const [limites, setLimites] = useState({});
 
-  const fetchDadosTeto = async () => {
+  const fetchDadosTeto = useCallback(async () => {
     try {
       const [resCats, resMetas] = await Promise.all([
         apiFetch('/boletos/categorias-utilizadas', { headers }),
@@ -171,9 +152,9 @@ function AdminPage({ mostrarToast }) {
       });
       setLimites(limits);
     } catch { /* noop */ }
-  };
+  }, [headers]);
 
-  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 3) fetchDadosTeto(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 3) fetchDadosTeto(); }, 0); return () => clearTimeout(t); }, [moduloAberto, fetchDadosTeto]);
 
   const salvarLimite = async (categoria) => {
     try {
@@ -260,7 +241,7 @@ function AdminPage({ mostrarToast }) {
   const [metaGasto, setMetaGasto] = useState([]);
   const [carregandoMeta, setCarregandoMeta] = useState(false);
 
-  const fetchMetaGasto = async () => {
+  const fetchMetaGasto = useCallback(async () => {
     setCarregandoMeta(true);
     const agora = new Date();
     const ano = agora.getFullYear();
@@ -282,24 +263,24 @@ function AdminPage({ mostrarToast }) {
       setMetaGasto(combined);
     } catch { /* noop */ }
     setCarregandoMeta(false);
-  };
+  }, [headers]);
 
-  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 5) fetchMetaGasto(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 5) fetchMetaGasto(); }, 0); return () => clearTimeout(t); }, [moduloAberto, fetchMetaGasto]);
 
   // === MÓDULO 6: BOLETOS EXCLUÍDOS ===
   const [excluidos, setExcluidos] = useState([]);
   const [carregandoExcluidos, setCarregandoExcluidos] = useState(false);
 
-  const fetchExcluidos = async () => {
+  const fetchExcluidos = useCallback(async () => {
     setCarregandoExcluidos(true);
     try {
       const resp = await apiFetch('/boletos/excluidos', { headers });
       if (resp.ok) setExcluidos(await resp.json());
     } catch { /* noop */ }
     setCarregandoExcluidos(false);
-  };
+  }, [headers]);
 
-  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 6) fetchExcluidos(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 6) fetchExcluidos(); }, 0); return () => clearTimeout(t); }, [moduloAberto, fetchExcluidos]);
 
   const recuperarBoleto = async (id) => {
     try {
@@ -318,16 +299,16 @@ function AdminPage({ mostrarToast }) {
   const [recorrentes, setRecorrentes] = useState([]);
   const [carregandoRecorrentes, setCarregandoRecorrentes] = useState(false);
 
-  const fetchRecorrentes = async () => {
+  const fetchRecorrentes = useCallback(async () => {
     setCarregandoRecorrentes(true);
     try {
       const resp = await apiFetch('/boletos/recorrentes', { headers });
       if (resp.ok) setRecorrentes(await resp.json());
     } catch { /* noop */ }
     setCarregandoRecorrentes(false);
-  };
+  }, [headers]);
 
-  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 7) fetchRecorrentes(); }, 0); return () => clearTimeout(t); }, [moduloAberto]);
+  useEffect(() => { const t = setTimeout(() => { if (moduloAberto === 7) fetchRecorrentes(); }, 0); return () => clearTimeout(t); }, [moduloAberto, fetchRecorrentes]);
 
   const deletarRecorrente = async (id) => {
     try {
@@ -343,18 +324,15 @@ function AdminPage({ mostrarToast }) {
   };
 
   return (
-    <div className="rounded-xl border border-atend-border bg-atend-card overflow-hidden shadow-2xl">
-      <div className="px-5 py-4 border-b border-atend-border">
-        <h3 className="text-lg font-bold text-white">Administração</h3>
-        <p className="text-xs text-slate-400">Apenas administradores têm acesso a esta tela</p>
-      </div>
+    <div className="app-section">
+      <div className="section-heading page-heading"><div><h2>Administração</h2><p>Gerencie usuários, categorias e dados do sistema.</p></div><Icon name="ajustes" size={24} className="subtle" /></div>
 
       {/* === MÓDULO 1 === */}
-      <AccordionSection indice={1} icone="📁" titulo="Gerenciar Usuários" descricao="Cadastro e permissões de usuários" aberto={moduloAberto === 1} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
+      <AccordionSection indice={1} icone="usuario" titulo="Gerenciar Usuários" descricao="Cadastro e permissões de usuários" aberto={moduloAberto === 1} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mb-3 mt-1 flex justify-end">
           <button onClick={() => setCriando(true)}
             className="bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none text-slate-950 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-all duration-200 shadow-lg shadow-atend-verde/10">
-            + Novo Usuário
+            <Icon name="mais" size={16} className="inline-icon" /> Novo Usuário
           </button>
         </div>
         <div className="overflow-x-auto">
@@ -386,10 +364,10 @@ function AdminPage({ mostrarToast }) {
                   </td>
                   <td className="px-5 py-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button onClick={() => { setEditando(u); setForm({ nome: u.nome, username: u.username }); }}
-                        className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-atend-verde/10">✏️</button>
-                      <button onClick={() => setConfirmExcluir({ aberto: true, id: u.id, nome: u.nome })}
-                        className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-rose-500/10">🗑</button>
+                      <button aria-label={`Editar usuário ${u.nome}`} onClick={() => { setEditando(u); setForm({ nome: u.nome, username: u.username }); }}
+                        className="text-xs font-semibold text-atend-verde border border-atend-verde/30 bg-atend-verde/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-atend-verde/10"><Icon name="editar" size={16} /></button>
+                      <button aria-label={`Excluir usuário ${u.nome}`} onClick={() => setConfirmExcluir({ aberto: true, id: u.id, nome: u.nome })}
+                        className="text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/5 px-2.5 py-1 rounded transition-all duration-200 active:scale-[0.98] focus:outline-none hover:bg-rose-500/10"><Icon name="excluir" size={16} /></button>
                     </div>
                   </td>
                 </tr>
@@ -413,7 +391,7 @@ function AdminPage({ mostrarToast }) {
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Editar Usuário</h2>
-                <button onClick={() => setEditando(null)} className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
+                <button onClick={() => setEditando(null)} aria-label="Fechar janela" className="icon-button"><Icon name="fechar" size={20} /></button>
               </div>
               <form onSubmit={salvarEdicao} className="space-y-4">
                 <div>
@@ -442,7 +420,7 @@ function AdminPage({ mostrarToast }) {
               <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
               <div className="flex justify-between items-center mb-6 mt-1">
                 <h2 className="text-lg font-bold text-white">Novo Usuário</h2>
-                <button onClick={() => setCriando(false)} className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
+                <button onClick={() => setCriando(false)} aria-label="Fechar janela" className="icon-button"><Icon name="fechar" size={20} /></button>
               </div>
               <form onSubmit={criarUsuario} className="space-y-4">
                 <div>
@@ -468,7 +446,7 @@ function AdminPage({ mostrarToast }) {
                   <input type="password" value={formCriar.senha} onChange={(e) => setFormCriar({ ...formCriar, senha: e.target.value })}
                     className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors" required />
                 </div>
-                {erroCriar && <div className="bg-rose-500/10 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erroCriar}</div>}
+                {erroCriar && <div className="bg-rose-500/10 text-rose-400 text-xs rounded-lg p-3 text-center"><Icon name="alerta" size={18} className="inline-icon" /> {erroCriar}</div>}
                 <div className="flex gap-3">
                   <button type="button" onClick={() => setCriando(false)}
                     className="flex-1 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] focus:outline-none text-slate-300 text-sm font-medium py-2.5 rounded-lg border border-slate-700 transition-all duration-200">
@@ -486,7 +464,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 2 === */}
-      <AccordionSection indice={2} icone="📊" titulo="Moderação de Categorias" descricao="Editar ou mesclar categorias de boletos" aberto={moduloAberto === 2} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
+      <AccordionSection indice={2} icone="categoria" titulo="Moderação de Categorias" descricao="Editar ou mesclar categorias de boletos" aberto={moduloAberto === 2} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {categorias.length === 0 && (
             <p className="text-sm text-slate-500 italic py-2">Nenhuma categoria encontrada.</p>
@@ -521,7 +499,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 3 === */}
-      <AccordionSection indice={3} icone="📈" titulo="Teto de Gastos" descricao="Definir limites mensais por categoria" aberto={moduloAberto === 3} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
+      <AccordionSection indice={3} icone="metas" titulo="Teto de Gastos" descricao="Definir limites mensais por categoria" aberto={moduloAberto === 3} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {categoriasMeta.length === 0 && (
             <p className="text-sm text-slate-500 italic py-2">Nenhuma categoria disponível.</p>
@@ -549,7 +527,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 4 === */}
-      <AccordionSection indice={4} icone="⚙️" titulo="Central de Backup" descricao="Exportar, importar e gerenciar dados" aberto={moduloAberto === 4} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
+      <AccordionSection indice={4} icone="backup" titulo="Central de Backup" descricao="Exportar, importar e gerenciar dados" aberto={moduloAberto === 4} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-4">
           {/* Baixar Cópia */}
           <div className="flex items-center justify-between bg-slate-900/20 rounded-lg px-4 py-3 border border-atend-border/50">
@@ -599,7 +577,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 5 === */}
-      <AccordionSection indice={5} icone="💰" titulo="Meta vs Gasto" descricao="Comparativo do mês atual por categoria" aberto={moduloAberto === 5} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
+      <AccordionSection indice={5} icone="metas" titulo="Meta vs Gasto" descricao="Comparativo do mês atual por categoria" aberto={moduloAberto === 5} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {carregandoMeta ? (
             <p className="text-sm text-slate-500 italic py-2">Carregando...</p>
@@ -629,7 +607,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 6 === */}
-      <AccordionSection indice={6} icone="🗑" titulo="Boletos Excluídos" descricao="Recuperar boletos deletados" aberto={moduloAberto === 6} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
+      <AccordionSection indice={6} icone="excluir" titulo="Boletos Excluídos" descricao="Recuperar boletos deletados" aberto={moduloAberto === 6} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {carregandoExcluidos ? (
             <p className="text-sm text-slate-500 italic py-2">Carregando...</p>
@@ -670,7 +648,7 @@ function AdminPage({ mostrarToast }) {
       </AccordionSection>
 
       {/* === MÓDULO 7 === */}
-      <AccordionSection indice={7} icone="🔄" titulo="Modelos Recorrentes" descricao="Gerenciar boletos recorrentes" aberto={moduloAberto === 7} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
+      <AccordionSection indice={7} icone="recorrente" titulo="Modelos Recorrentes" descricao="Gerenciar boletos recorrentes" aberto={moduloAberto === 7} onToggle={(i) => setModuloAberto(moduloAberto === i ? null : i)}>
         <div className="mt-1 space-y-2">
           {carregandoRecorrentes ? (
             <p className="text-sm text-slate-500 italic py-2">Carregando...</p>

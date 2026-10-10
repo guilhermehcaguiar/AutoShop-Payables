@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { normalizarBoleto } from '../boleto.js';
 import { lerImagemBoleto, observarVideoBoleto } from '../leitorBoleto.js';
+import Dialog from './Dialog.jsx';
 
 const READER_ID = 'boleto-scanner-reader';
 let proximaSessao = 0;
@@ -202,8 +203,7 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
 
   if (!aberto) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center px-4" role="dialog" aria-modal="true" aria-label="Escanear boleto">
-      <div className="fixed inset-0 bg-black/80" onClick={onFechar} />
+    <Dialog aberto={aberto} titulo="Escanear código de barras do boleto" label="Escanear boleto" onFechar={onFechar} largo>
       <div className="relative z-10 w-full max-w-lg">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold text-white">Escanear código de barras do boleto</h3>
@@ -233,7 +233,7 @@ function ScannerBoleto({ aberto, onScan, onFechar }) {
         </div>
         <p className="text-center text-xs text-slate-300 mt-3">Enquadre o código inteiro e as margens brancas. A leitura também busca fora da faixa central. Mantenha a câmera firme e afaste um pouco se as barras estiverem desfocadas. Para colar a linha digitável, use o campo do cadastro.</p>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

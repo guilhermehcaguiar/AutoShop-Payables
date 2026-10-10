@@ -12,7 +12,7 @@
   --color-atend-bg: var(--c-bg);
   --color-atend-card: var(--c-card);
   --color-atend-border: var(--c-border);
-  --color-atend-verde: #2ecc71;
+  --color-atend-verde: var(--brand-green);
   --animate-fade-in: fade-in 0.3s ease-out;
   --animate-fade-in-scale: fade-in-scale 0.25s ease-out;
   --animate-slide-up: slide-up 0.3s ease-out;
@@ -20,6 +20,8 @@
 
 :root,
 [data-theme="dark"] {
+  --brand-green: #2ecc71;
+  --brand-green-rgb: 46, 204, 113;
   --c-bg: #0f1117;
   --c-card: #1a1d27;
   --c-border: #2a2d3a;

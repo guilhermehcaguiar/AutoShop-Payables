@@ -1,0 +1,37 @@
+const paths = {
+  dashboard: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></>,
+  boleto: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" /><path d="M9 7h6M9 11h6M9 15h3" /></>,
+  fornecedores: <><path d="M3 21V7l9-4 9 4v14M7 21v-5h10v5M7 9h2m6 0h2M7 12h2m6 0h2" /></>,
+  relatorios: <><path d="M4 3v18h17M8 16v-4m5 4V8m5 8V5" /></>,
+  historico: <><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v5l3 2" /></>,
+  usuario: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></>,
+  ajustes: <><path d="M4 7h16M4 17h16" /><circle cx="8" cy="7" r="3" /><circle cx="16" cy="17" r="3" /></>,
+  metas: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" /></>,
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  fechar: <path d="m6 6 12 12M6 18 18 6" />,
+  mais: <path d="M12 5v14M5 12h14" />,
+  busca: <><circle cx="10" cy="10" r="7" /><path d="m15 15 6 6" /></>,
+  calendario: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4m10-4v4M3 10h18" /></>,
+  check: <path d="m5 12 4 4L19 6" />,
+  alerta: <><path d="m12 3 10 18H2L12 3Z" /><path d="M12 9v4m0 4h.01" /></>,
+  download: <><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4" /></>,
+  editar: <><path d="m15 4 5 5M4 20l4-1L21 6l-5-5L3 14l1 6Z" /></>,
+  excluir: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" /></>,
+  sair: <><path d="M9 3H3v18h6m6-15 6 6-6 6M7 12h14" /></>,
+  lua: <path d="M20 15A9 9 0 0 1 9 4 9 9 0 1 0 20 15Z" />,
+  sol: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1" /></>,
+  sistema: <><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8m-4-4v4" /></>,
+  camera: <><path d="M3 7h4l2-3h6l2 3h4v14H3V7Z" /><circle cx="12" cy="13" r="4" /></>,
+  seta: <path d="M4 12h16m-6-6 6 6-6 6" />,
+  anexo: <path d="m8 12 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9" />,
+  categoria: <><path d="M3 3h8l10 10-8 8L3 11V3Z" /><circle cx="7" cy="7" r="1" /></>,
+  backup: <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v7c0 4 16 4 16 0V5M4 12v7c0 4 16 4 16 0v-7" /></>,
+  recorrente: <><path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5" /></>,
+  documento: <><path d="M5 3h9l5 5v13H5V3Zm9 0v5h5M8 12h8M8 16h8" /></>,
+  chevron: <path d="m6 9 6 6 6-6" />,
+  cadeado: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" /></>,
+};
+
+export default function Icon({ name = 'boleto', size = 20, ...props }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name] || paths.boleto}</svg>;
+}

@@ -2,6 +2,7 @@ export function parseValorBR(texto) {
   if (typeof texto !== 'string') return null;
   const limpo = texto.trim().replace(/[R$\s]/g, '');
   if (!limpo) return null;
+  if (!/^(?:\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+\.\d{1,2})$/.test(limpo)) return null;
 
   let numero;
   if (limpo.includes(',')) {

@@ -21,9 +21,9 @@ export default function Login({ username, setUsername, senha, setSenha, erro, ca
     <main className="login-page">
       <div className="login-shell">
         <section className="login-brand" aria-label="Financeiro Atend-Car">
-          <a className="login-wordmark" href="#" aria-label="Atend-Car, início">Atend<span>-Car</span><span className="login-wordmark-dot" /></a>
+          <a className="login-wordmark" href="#" aria-label="Atend-Car, início">Atend-Car</a>
           <div className="login-brand-content">
-            <p className="login-eyebrow"><span /> GESTÃO FINANCEIRA</p>
+            <p className="login-eyebrow"><span /> SISTEMA FINANCEIRO</p>
             <h1>Seu financeiro<br />{' '}sob <span>controle.</span></h1>
             <p className="login-brand-description">Mais clareza nas contas.<br />Mais tranquilidade para seguir em frente.</p>
             <div className="login-road" aria-hidden="true">

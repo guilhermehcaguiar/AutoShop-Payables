@@ -1,319 +1,109 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { apiFetch } from '../api.js';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { apiJson } from '../api.js';
 import { parseValorBR, formatarValorBR } from '../formatar.js';
 import { normalizarBoleto } from '../boleto.js';
-
+import { dadosBoleto } from '../dadosBoleto.js';
+import { moeda, formatarData } from '../boletosView.js';
+import Dialog from './Dialog.jsx';
+import Icon from './Icon.jsx';
 const ScannerBoleto = lazy(() => import('./ScannerBoleto.jsx'));
 
-function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando }) {
-  const [fornecedor, setFornecedor] = useState('');
-  const [valor, setValor] = useState('');
-  const [vencimento, setVencimento] = useState('');
-  const [codigoBarras, setCodigoBarras] = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [categorias, setCategorias] = useState([]);
-  const [fornecedores, setFornecedores] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState('');
-  const [mostrarDropdownFornecedor, setMostrarDropdownFornecedor] = useState(false);
-  const [recorrente, setRecorrente] = useState(false);
-  const [nMeses, setNMeses] = useState(3);
-  const [mostrarScanner, setMostrarScanner] = useState(false);
-  const editando = !!boletoEditando;
-
-  const fornecedoresFiltrados = fornecedores.filter((f) =>
-    f.nome.toLowerCase().includes(fornecedor.toLowerCase())
-  );
-
-  useEffect(() => {
-    if (!aberto) return;
-    const token = localStorage.getItem('token');
-    const headers = { 'Authorization': `Bearer ${token}` };
-    const timer = setTimeout(() => {
-      if (boletoEditando) {
-        setFornecedor(boletoEditando.fornecedor);
-        setValor(boletoEditando.valor.toFixed(2).replace('.', ','));
-        setVencimento(boletoEditando.vencimento);
-        setCodigoBarras(boletoEditando.codigo_barras || '');
-        setCategoria(boletoEditando.categoria || '');
-        setDescricao(boletoEditando.descricao || '');
-      } else {
-        setFornecedor(''); setValor(''); setVencimento('');
-        setCodigoBarras(''); setCategoria('');
-        setDescricao('');
-      }
-      setRecorrente(false);
-      setMostrarScanner(false);
-      setNMeses(3);
-      setErro('');
-    }, 0);
-    apiFetch('/boletos/categorias-utilizadas', { headers })
-      .then((r) => r.ok && r.json()).then(setCategorias).catch(() => {});
-    apiFetch('/fornecedores/', { headers })
-      .then((r) => r.ok && r.json()).then(setFornecedores).catch(() => {});
-    return () => clearTimeout(timer);
-  }, [aberto, boletoEditando]);
-
-  const adicionarMeses = (data, meses) => {
-    const d = new Date(data + 'T12:00:00');
-    const dia = d.getDate();
-    d.setMonth(d.getMonth() + meses);
-    if (d.getDate() !== dia) d.setDate(0);
-    return d.toISOString().slice(0, 10);
-  };
-
-  const boletosPreview = useMemo(() => {
-    if (!recorrente || !vencimento || !valor) return [];
-    const lista = [];
-    for (let i = 0; i < nMeses; i++) {
-      lista.push({
-        mes: i === 0 ? 'Este mês' : `+${i} mês`,
-        vencimento: adicionarMeses(vencimento, i),
-        valor: valor,
-      });
-    }
-    return lista;
-  }, [recorrente, vencimento, valor, nMeses]);
-
-  const autoSalvarFornecedor = async (token) => {
-    const existe = fornecedores.some((f) => f.nome.toLowerCase() === fornecedor.toLowerCase());
-    if (!existe && fornecedor.trim()) {
-      await apiFetch('/fornecedores/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ nome: fornecedor.trim() }),
-      });
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErro('');
-    setCarregando(true);
-    const token = localStorage.getItem('token');
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-    const valorNumerico = parseValorBR(valor);
-    if (valorNumerico === null) {
-      setErro('Valor inválido. Digite apenas números (ex: 1.500,00)');
-      setCarregando(false);
-      return;
-    }
-    let codigoNormalizado;
-    try {
-      codigoNormalizado = normalizarBoleto(codigoBarras);
-    } catch (err) {
-      setErro(err.message);
-      setCarregando(false);
-      return;
-    }
-    const bodyBase = {
-      fornecedor,
-      valor: valorNumerico,
-      codigo_barras: codigoNormalizado,
-      categoria: categoria || null,
-      descricao: descricao || null,
-    };
-    try {
-      if (editando) {
-        const resp = await apiFetch(`/boletos/${boletoEditando.id}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({ ...bodyBase, vencimento }),
-        });
-        const dados = await resp.json();
-        if (!resp.ok) { setErro(dados.detail || 'Erro ao salvar boleto'); setCarregando(false); return; }
-        onBoletoCriado();
-        onFechar();
-        setCarregando(false);
-        return;
-      }
-      const boletosCriar = recorrente ? boletosPreview : [{ vencimento, ...bodyBase }];
-      let sucesso = 0;
-      let erroDetalhe = '';
-      for (const b of boletosCriar) {
-        const resp = await apiFetch('/boletos/', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ ...b, vencimento: b.vencimento }),
-        });
-        if (resp.ok) {
-          sucesso++;
-          continue;
-        }
-        if (!erroDetalhe) {
-          try {
-            const dados = await resp.json();
-            erroDetalhe = dados.detail || '';
-          } catch { /* noop */ }
-        }
-      }
-      await autoSalvarFornecedor(token);
-      if (sucesso > 0) {
-        onBoletoCriado();
-        onFechar();
-      } else {
-        setErro(erroDetalhe || 'Erro ao criar boletos');
-      }
-    } catch {
-      setErro('Erro de conexão com o servidor');
-    } finally {
-      setCarregando(false);
-    }
-  };
-
-  if (!aberto) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="fixed inset-0 bg-black/60" onClick={onFechar} />
-      <div className="relative w-full max-w-md bg-atend-card border border-atend-border rounded-2xl shadow-2xl p-6 z-10 max-h-[85vh] overflow-y-auto animate-fade-in-scale">
-        <div className="absolute top-0 left-0 w-full h-[3px] bg-atend-verde shadow-[0_0_15px_#2ecc71] rounded-t-2xl" />
-        <div className="flex justify-between items-center mb-6 mt-1">
-          <h2 className="text-lg font-bold text-white">{editando ? 'Editar' : 'Novo'} Boleto</h2>
-          <button onClick={onFechar} className="text-slate-500 hover:text-white text-xl leading-none active:scale-[0.98] focus:outline-none transition-all duration-200">&times;</button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Fornecedor</label>
-            <input type="text" value={fornecedor} onChange={(e) => { setFornecedor(e.target.value); setMostrarDropdownFornecedor(true); }}
-              onFocus={() => setMostrarDropdownFornecedor(true)}
-              onBlur={() => setTimeout(() => setMostrarDropdownFornecedor(false), 200)}
-              placeholder="Ex: Auto Peças Silva"
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
-              required />
-            {mostrarDropdownFornecedor && fornecedoresFiltrados.length > 0 && (
-              <div className="absolute z-20 w-full bg-atend-card border border-atend-border rounded-lg mt-1 max-h-40 overflow-y-auto shadow-xl">
-                {fornecedoresFiltrados.map((f) => (
-                  <button key={f.id} type="button" onMouseDown={() => { setFornecedor(f.nome); setMostrarDropdownFornecedor(false); }}
-                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-atend-verde/20 transition-colors">
-                    {f.nome}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Valor (R$)</label>
-            <input type="text" value={valor} onChange={(e) => setValor(e.target.value)}
-              placeholder="Ex: 450,00"
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
-              required />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Vencimento</label>
-            <input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors"
-              required />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Categoria</label>
-            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors active:scale-[0.98]"
-              required>
-              <option value="" className="text-slate-600">Selecione...</option>
-              {categorias.map((cat, i) => (<option key={i} value={cat}>{cat}</option>))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Código de barras ou linha digitável</label>
-            <div className="flex gap-2">
-              <input type="text" inputMode="numeric" value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)}
-                placeholder="44, 47 ou 48 dígitos"
-                className="flex-1 bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors"
-                required />
-              <button type="button" onClick={() => setMostrarScanner(true)}
-                className="shrink-0 bg-atend-verde/15 hover:bg-atend-verde/25 border border-atend-verde/30 rounded-lg px-3 py-2.5 text-lg leading-none transition-all duration-200 active:scale-95"
-                title="Escanear código de barras">
-                📷
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Descrição <span className="text-slate-600 normal-case">(opcional)</span>
-            </label>
-            <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Descrição do boleto"
-              rows="2"
-              className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-atend-verde/60 transition-colors resize-none" />
-          </div>
-          {!editando && (
-            <div className="flex items-center gap-3 pt-1">
-              <button type="button" role="switch" aria-checked={recorrente}
-                onClick={() => setRecorrente(!recorrente)}
-                className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 ${recorrente ? 'bg-atend-verde shadow-[0_0_8px_rgba(34,197,94,0.3)]' : 'bg-slate-700 hover:bg-slate-600'}`}>
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${recorrente ? 'translate-x-5 scale-105' : 'translate-x-0 scale-100'}`} />
-              </button>
-              <div>
-                <p className="text-sm font-medium text-white">Repetir mensalmente</p>
-                <p className="text-xs text-slate-500">Criar boletos para os próximos meses</p>
-              </div>
-            </div>
-          )}
-          {recorrente && !editando && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Número de meses</label>
-              <input type="number" min={1} max={24} value={nMeses} onChange={(e) => setNMeses(Math.min(24, Math.max(1, parseInt(e.target.value) || 1)))}
-                className="w-full bg-atend-bg border border-atend-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-atend-verde/60 transition-colors" />
-              {boletosPreview.length > 1 && (
-                <div className="mt-3 bg-slate-900/30 rounded-lg overflow-hidden border border-atend-border/50">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-atend-border/50 text-slate-400 font-semibold uppercase tracking-wider">
-                        <th className="px-3 py-2">Período</th>
-                        <th className="px-3 py-2">Vencimento</th>
-                        <th className="px-3 py-2 text-right">Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-atend-border/30 text-slate-300">
-                      {boletosPreview.map((b, i) => (
-                        <tr key={i} className="hover:bg-slate-900/20">
-                          <td className="px-3 py-2">{b.mes}</td>
-                          <td className="px-3 py-2">{new Date(b.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-                          <td className="px-3 py-2 text-right font-mono">
-                            R$ {formatarValorBR(parseValorBR(b.valor))}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-          {erro && (
-            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg p-3 text-center">⚠️ {erro}</div>
-          )}
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onFechar}
-              className="flex-1 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] focus:outline-none text-slate-300 text-sm font-medium py-2.5 rounded-lg transition-all duration-200 border border-slate-700">
-              Cancelar
-            </button>
-            <button type="submit" disabled={carregando}
-              className="flex-1 bg-atend-verde hover:opacity-90 active:scale-[0.98] focus:outline-none disabled:opacity-50 text-slate-950 text-sm font-bold py-2.5 rounded-lg transition-all duration-200">
-              {carregando ? 'Salvando...' : editando ? 'Atualizar' : 'Salvar'}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {mostrarScanner && (
-        <Suspense fallback={
-          <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/80 text-white">
-            <p role="status">Abrindo scanner...</p>
-            <button type="button" onClick={() => setMostrarScanner(false)} className="rounded-lg bg-slate-800 px-4 py-2">Cancelar</button>
-          </div>
-        }>
-          <ScannerBoleto
-            aberto={aberto}
-            onScan={(codigo) => { setCodigoBarras(codigo); setMostrarScanner(false); }}
-            onFechar={() => setMostrarScanner(false)}
-          />
-        </Suspense>
-      )}
-    </div>
-  );
+function chaveRascunho() {
+  try { const p = JSON.parse(localStorage.getItem('usuarioPerfil') || '{}'); return `atend-rascunho-${p.username || p.nome || ''}`; } catch { return 'atend-rascunho'; }
 }
-
-export default ModalNovoBoleto;
+function formularioInicial(boleto, chave) {
+  if (boleto) return { fornecedor: boleto.fornecedor, valor: Number(boleto.valor).toFixed(2).replace('.', ','), vencimento: boleto.vencimento, codigo_barras: boleto.codigo_barras || '', categoria: boleto.categoria || '', descricao: boleto.descricao || '', previsao: !boleto.codigo_barras, recorrente: false };
+  try { const salvo = JSON.parse(sessionStorage.getItem(chave) || 'null'); if (salvo) return salvo; } catch { /* Rascunho inválido. */ }
+  return { fornecedor: '', valor: '', vencimento: '', codigo_barras: '', categoria: '', descricao: '', previsao: false, recorrente: false };
+}
+export default function ModalNovoBoleto({ aberto, onFechar, onBoletoCriado, boletoEditando, podeRecorrencia = false }) {
+  const [chave] = useState(chaveRascunho);
+  const [inicial] = useState(() => formularioInicial(boletoEditando, chave));
+  const [form, setForm] = useState(inicial);
+  const [categorias, setCategorias] = useState([]);
+  const [novaCategoria, setNovaCategoria] = useState(false);
+  const [fornecedores, setFornecedores] = useState([]);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const [aviso, setAviso] = useState('');
+  const [scanner, setScanner] = useState(false);
+  const [revisao, setRevisao] = useState(null);
+  const [dataLida, setDataLida] = useState('');
+  const [contaSalva, setContaSalva] = useState(false);
+  const lock = useRef(false);
+  const dialog = useRef(null);
+  const categoriaInput = useRef(null);
+  const editar = !!boletoEditando;
+  const alterar = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }));
+  const alterado = JSON.stringify(form) !== JSON.stringify(inicial);
+  useEffect(() => {
+    if (!editar && !contaSalva) {
+      try { sessionStorage.setItem(chave, JSON.stringify(form)); } catch { /* Armazenamento indisponível. */ }
+    }
+  }, [form, editar, chave, contaSalva]);
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.allSettled([apiJson('/boletos/categorias-utilizadas', { signal: controller.signal }), apiJson('/fornecedores/', { signal: controller.signal })]).then(([c, f]) => {
+      if (controller.signal.aborted) return;
+      if (c.status === 'fulfilled') setCategorias(c.value);
+      if (f.status === 'fulfilled') setFornecedores(f.value);
+      if (c.status === 'rejected' || f.status === 'rejected') setAviso('As sugestões não carregaram. Você pode preencher os campos manualmente.');
+    });
+    return () => controller.abort();
+  }, []);
+  let erroCodigo = '';
+  if (!form.previsao && form.codigo_barras) { try { normalizarBoleto(form.codigo_barras); } catch (e) { erroCodigo = e.message; } }
+  const ler = codigo => {
+    setScanner(false);
+    try { const dados = dadosBoleto(codigo); setForm(f => ({ ...f, codigo_barras: dados.codigo, previsao: false })); setRevisao(dados); setDataLida(dados.vencimentos.at(-1) || ''); }
+    catch (e) { setErro(e.message); }
+  };
+  const salvar = async e => {
+    e.preventDefault(); if (lock.current) return;
+    setErro('');
+    const valor = parseValorBR(form.valor);
+    if (!valor || valor <= 0) { setErro('Informe um valor maior que zero. Ex.: 1.500,00.'); return; }
+    let codigo = '';
+    try { if (!form.previsao) codigo = normalizarBoleto(form.codigo_barras); } catch (e) { setErro(e.message); return; }
+    if (!form.fornecedor.trim() || !form.categoria.trim() || !form.vencimento) { setErro('Preencha fornecedor, categoria e vencimento.'); return; }
+    lock.current = true; setSalvando(true);
+    try {
+      const dados = { fornecedor: form.fornecedor.trim(), valor, vencimento: form.vencimento, codigo_barras: codigo, categoria: form.categoria.trim(), descricao: form.descricao.trim() || null };
+      if (!contaSalva) {
+        await apiJson(editar ? `/boletos/${boletoEditando.id}` : '/boletos/', { method: editar ? 'PUT' : 'POST', body: JSON.stringify(dados) });
+        setContaSalva(true); sessionStorage.removeItem(chave); onBoletoCriado();
+      }
+      if (!editar && form.recorrente) await apiJson('/boletos/recorrentes', { method: 'POST', body: JSON.stringify({ ...dados, vencimento_dia: Number(form.vencimento.slice(8, 10)) }) });
+      onFechar();
+    } catch (e) { setErro(e.message); }
+    finally { lock.current = false; setSalvando(false); }
+  };
+  const fechar = () => { if (!editar) sessionStorage.removeItem(chave); onFechar(); };
+  return <><Dialog ref={dialog} aberto={aberto} titulo={editar ? 'Editar Boleto' : 'Novo Boleto'} descricao="Preencha os dados e confira antes de salvar." onFechar={fechar} ocupado={salvando} alterado={alterado && !contaSalva} largo>
+    {contaSalva ? <><div className="notice notice-success" role="status">A conta foi salva. Falta concluir o modelo recorrente; tentar novamente não duplicará a conta.</div>{erro && <p role="alert" className="notice notice-error">{erro}</p>}<div className="dialog-actions"><button type="button" className="button-secondary" disabled={salvando} onClick={fechar}>Concluir sem modelo</button><button type="button" className="button-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Tentar salvar modelo'}</button></div></> : <form onSubmit={salvar}>
+      {!editar && inicial.fornecedor && <p className="notice">Rascunho recuperado. Confira os dados antes de salvar.</p>}
+      {aviso && <p className="notice" role="status">{aviso}</p>}
+      <fieldset disabled={salvando} style={{ border: 0, padding: 0, margin: 0 }}>
+        <div className="notice"><div className="actions-row"><button type="button" className="button-secondary" title="Escanear código de barras" onClick={() => setScanner(true)}><Icon name="camera" size={18} />Escanear boleto</button><span>Use a câmera, uma imagem ou cole a linha digitável abaixo.</span></div></div>
+        {revisao && <div className="notice"><strong>Confira os dados lidos</strong><p>Valor: {revisao.valor ? moeda(revisao.valor) : 'Não informado no código'}</p>{revisao.vencimentos.length ? <div className="field"><label htmlFor="data-lida">Vencimento identificado</label><select id="data-lida" value={dataLida} onChange={e => setDataLida(e.target.value)}>{[...revisao.vencimentos].reverse().map(d => <option key={d} value={d}>{formatarData(d)}</option>)}</select><small>O fator de vencimento é reutilizado. Compare com a data impressa no boleto.</small></div> : <p>Vencimento não identificado. Preencha manualmente.</p>}<div className="actions-row"><button type="button" className="button-primary" onClick={() => { setForm(f => ({ ...f, codigo_barras: revisao.codigo, previsao: false, ...(revisao.valor ? { valor: revisao.valor.toFixed(2).replace('.', ',') } : {}), ...(dataLida ? { vencimento: dataLida } : {}) })); setRevisao(null); }}>Aplicar dados lidos</button><button type="button" className="button-secondary" onClick={() => setRevisao(null)}>Descartar leitura</button></div></div>}
+        <label className="field-hint field-inline" style={{ marginBottom: 16 }}><input type="checkbox" checked={form.previsao} onChange={e => alterar('previsao', e.target.checked)} />Ainda não recebi o boleto (conta prevista)</label>
+        {!form.previsao && <div className="field"><label htmlFor="boleto-codigo">Código de barras / linha digitável *</label><input id="boleto-codigo" inputMode="numeric" value={form.codigo_barras} onChange={e => alterar('codigo_barras', e.target.value)} aria-invalid={!!erroCodigo} aria-describedby="ajuda-codigo" placeholder="44, 47 ou 48 dígitos" required /><small id="ajuda-codigo" style={erroCodigo ? { color: '#ef8c8c' } : undefined}>{erroCodigo || 'Os dígitos verificadores são conferidos antes de salvar.'}</small>{form.codigo_barras && !erroCodigo && <button type="button" className="link-button" onClick={() => ler(form.codigo_barras)}>Conferir valor e vencimento do código</button>}</div>}
+        <div className="field"><label htmlFor="boleto-fornecedor">Fornecedor *</label><input id="boleto-fornecedor" value={form.fornecedor} onChange={e => alterar('fornecedor', e.target.value)} list="boleto-fornecedores" required /><datalist id="boleto-fornecedores">{fornecedores.map(f => <option key={f.id} value={f.nome} />)}</datalist></div>
+        <div className="field-row"><div className="field"><label htmlFor="boleto-valor">Valor (R$) *</label><input id="boleto-valor" inputMode="decimal" value={form.valor} onChange={e => alterar('valor', e.target.value)} onBlur={() => { const v = parseValorBR(form.valor); if (v !== null) alterar('valor', formatarValorBR(v)); }} placeholder="450,00" required /></div><div className="field"><label htmlFor="boleto-vencimento">Vencimento *</label><input id="boleto-vencimento" type="date" value={form.vencimento} onChange={e => alterar('vencimento', e.target.value)} required /></div></div>
+        <div className="field">
+          <div className="actions-row" style={{ justifyContent: 'space-between' }}>
+            <label htmlFor="boleto-categoria">{novaCategoria ? 'Nome da nova categoria *' : 'Categoria *'}</label>
+            <button type="button" className="button-secondary" aria-pressed={novaCategoria} onClick={() => { setNovaCategoria(v => !v); if (!novaCategoria) alterar('categoria', ''); categoriaInput.current?.focus(); }}>
+              <Icon name={novaCategoria ? 'categoria' : 'mais'} size={16} />{novaCategoria ? 'Ver categorias existentes' : 'Nova categoria'}
+            </button>
+          </div>
+          <input ref={categoriaInput} id="boleto-categoria" value={form.categoria} onChange={e => alterar('categoria', e.target.value)} list={novaCategoria ? undefined : 'boleto-categorias'} placeholder={novaCategoria ? 'Ex.: Manutenção de equipamentos' : 'Escolha ou digite uma categoria'} aria-describedby="ajuda-categoria" required />
+          <datalist id="boleto-categorias">{categorias.map(c => <option key={c} value={c} />)}</datalist>
+          <small id="ajuda-categoria">{novaCategoria ? 'A nova categoria será criada ao salvar o boleto e ficará disponível nos próximos cadastros.' : 'Escolha uma sugestão ou use Nova categoria para cadastrar outro nome.'}</small>
+        </div>
+        <div className="field"><label htmlFor="boleto-descricao">Descrição</label><textarea id="boleto-descricao" value={form.descricao} onChange={e => alterar('descricao', e.target.value)} rows={2} /></div>
+        {!editar && podeRecorrencia && <div className="notice"><label className="field-inline"><input type="checkbox" checked={form.recorrente} onChange={e => alterar('recorrente', e.target.checked)} />Salvar também como modelo recorrente</label><p>O modelo guarda valor, fornecedor e dia do vencimento. As próximas contas serão previsões, com código próprio após o recebimento. Gerencie os modelos na Administração.</p></div>}
+      </fieldset>{erro && <p className="notice notice-error" role="alert">{erro}</p>}<div className="dialog-actions"><button type="button" className="button-secondary" disabled={salvando} onClick={() => dialog.current?.solicitarFechamento()}>Cancelar</button><button type="submit" className="button-primary" disabled={salvando || !!erroCodigo}>{salvando ? 'Salvando...' : 'Salvar Boleto'}</button></div>
+    </form>}
+  </Dialog>{scanner && <Suspense fallback={<Dialog aberto titulo="Carregando scanner" onFechar={() => setScanner(false)}><p role="status">Carregando leitor...</p></Dialog>}><ScannerBoleto aberto onFechar={() => setScanner(false)} onScan={ler} /></Suspense>}</>;
+}
